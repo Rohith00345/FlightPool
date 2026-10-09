@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { checkOtpRateLimit, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
+import { checkOtpRateLimit, consumeOtpInDatabase, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limiting: Max 5 attempts per 10 minutes
-    const rateCheck = checkOtpRateLimit(identifier);
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    // Rate limiting: Max 5 attempts per 10 minutes (backed by PostgreSQL OtpRequest table)
+    const rateCheck = await checkOtpRateLimit(identifier, ip);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many OTP attempts. Please wait 10 minutes before trying again." },
@@ -35,9 +36,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 2: Verify OTP
-    // In production (DEMO_MODE=false), verify actual OTP; in demo mode allow 123456
     const isDemoMode = process.env.DEMO_MODE !== "false";
-    if (isDemoMode && otp !== "123456") {
+    if (!isDemoMode) {
+      // In production mode, hardcoded dev OTP 123456 is rejected
+      return NextResponse.json(
+        { error: "Production mode active: Live SMS verification provider required." },
+        { status: 403 }
+      );
+    }
+
+    if (otp !== "123456") {
       return NextResponse.json(
         { error: "Invalid OTP code. Please enter 123456" },
         { status: 400 }
@@ -63,16 +71,22 @@ export async function POST(req: NextRequest) {
           phone,
           email,
           name: name || (isEmail ? identifier.split("@")[0] : "Mumbai Traveler"),
-          gender: gender || "UNSPECIFIED",
+          gender: gender || "PREFER_NOT_TO_SAY",
+          genderVerified: gender === "FEMALE",
           role: role || "RIDER",
         },
       });
-    } else if (gender && user.gender === "UNSPECIFIED") {
+    } else if (gender && (user.gender === "UNSPECIFIED" || user.gender === "PREFER_NOT_TO_SAY")) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { gender },
+        data: {
+          gender,
+          genderVerified: gender === "FEMALE" ? true : user.genderVerified,
+        },
       });
     }
+
+    await consumeOtpInDatabase(user.phone);
 
     const userRole = (user.role as SessionPayload["role"]) || "RIDER";
     const token = signSessionToken({
@@ -91,6 +105,7 @@ export async function POST(req: NextRequest) {
         phone: user.phone,
         email: user.email,
         gender: user.gender,
+        genderVerified: user.genderVerified,
         role: user.role,
       },
     });

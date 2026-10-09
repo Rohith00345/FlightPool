@@ -99,4 +99,153 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
     expect(delJson.success).toBe(true);
     expect(delJson.message).toContain("purged in compliance with DPDP");
   });
+
+  test("6. Ownership Check: Rider A cannot view Rider B's ride status (403)", async ({ request }) => {
+    // Register Rider A
+    const authA = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100091", otp: "123456", name: "Rider Alice" },
+    });
+    const { token: tokenA } = await authA.json();
+
+    // Register Rider B
+    const authB = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100092", otp: "123456", name: "Rider Bob" },
+    });
+    const { user: userB } = await authB.json();
+
+    // Rider A tries to fetch Rider B's ride status
+    const crossRes = await request.get(`/api/rides/status?userId=${userB.id}`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(crossRes.status()).toBe(403);
+    const json = await crossRes.json();
+    expect(json.error).toContain("Forbidden");
+  });
+
+  test("7. Ownership Check: Rider A cannot create a ride request on behalf of Rider B (403)", async ({ request }) => {
+    const authA = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100093", otp: "123456", name: "Rider A7" },
+    });
+    const { token: tokenA } = await authA.json();
+
+    const authB = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100094", otp: "123456", name: "Rider B7" },
+    });
+    const { user: userB } = await authB.json();
+
+    const flight = (await (await request.get("/api/flights")).json()).flights[0];
+
+    const crossRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      data: {
+        userId: userB.id,
+        flightId: flight.id,
+        destinationZone: "Andheri",
+        destinationAddress: "Lokhandwala Complex",
+        luggageCount: 1,
+      },
+    });
+    expect(crossRes.status()).toBe(403);
+    const json = await crossRes.json();
+    expect(json.error).toContain("Forbidden");
+  });
+
+  test("8. Women-Only Segregation: Male or unverified rider requesting womenOnly is rejected with 400", async ({ request }) => {
+    // Male rider
+    const authMale = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100095", otp: "123456", name: "Male Rider", gender: "MALE" },
+    });
+    const { user: maleUser, token: maleToken } = await authMale.json();
+
+    const flight = (await (await request.get("/api/flights")).json()).flights[0];
+
+    const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${maleToken}` },
+      data: {
+        userId: maleUser.id,
+        flightId: flight.id,
+        destinationZone: "Bandra",
+        womenOnly: true,
+      },
+    });
+    expect(reqRes.status()).toBe(400);
+    const json = await reqRes.json();
+    expect(json.error).toContain("Women-only pools are exclusively available to verified female passengers");
+  });
+
+  test("9. Cross-User Trip Security: Rider cannot update trip lifecycle (403)", async ({ request }) => {
+    const authRider = await request.post("/api/auth/otp", {
+      data: { identifier: "+919810100096", otp: "123456", name: "Regular Rider" },
+    });
+    const { user: riderUser, token: riderToken } = await authRider.json();
+
+    const flight = (await (await request.get("/api/flights")).json()).flights[0];
+    const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+      data: {
+        userId: riderUser.id,
+        flightId: flight.id,
+        destinationZone: "Andheri",
+        destinationAddress: "Lokhandwala Complex",
+        luggageCount: 1,
+      },
+    });
+    const reqData = await reqRes.json();
+    const soloRes = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+      data: {
+        userId: riderUser.id,
+        rideRequestId: reqData.rideRequest.id,
+      },
+    });
+    const soloData = await soloRes.json();
+    const tripId = soloData.trip.id;
+
+    const patchRes = await request.patch(`/api/trips/${tripId}`, {
+      headers: { Authorization: `Bearer ${riderToken}` },
+      data: { status: "COMPLETED" },
+    });
+    expect(patchRes.status()).toBe(403);
+    const json = await patchRes.json();
+    expect(json.error).toContain("Forbidden");
+  });
+
+  test("10. Database-backed OTP rate limiter blocks excessive requests with 429", async ({ request }) => {
+    const testPhone = "+9198" + Math.floor(10000000 + Math.random() * 90000000);
+    // Attempt 5 failed OTP requests (within limit)
+    for (let i = 0; i < 5; i++) {
+      const res = await request.post("/api/auth/otp", {
+        data: { identifier: testPhone, otp: "000000" },
+      });
+      expect(res.status()).toBe(400);
+    }
+
+    // 6th request within window must be rate-limited (429)
+    const rateLimitedRes = await request.post("/api/auth/otp", {
+      data: { identifier: testPhone, otp: "000000" },
+    });
+    expect(rateLimitedRes.status()).toBe(429);
+    const json = await rateLimitedRes.json();
+    expect(json.error).toContain("Too many OTP");
+  });
+
+  test("11. Admin Retention API: Anonymous rejected (401/403), Admin executes purge (200)", async ({ request }) => {
+    // Anonymous
+    const anonRes = await request.post("/api/admin/retention");
+    expect([401, 403]).toContain(anonRes.status());
+
+    // Admin login
+    const adminAuth = await request.post("/api/auth/otp", {
+      data: { identifier: "+919999999999", otp: "123456", role: "ADMIN" },
+    });
+    const { token: adminToken } = await adminAuth.json();
+
+    const purgeRes = await request.post("/api/admin/retention", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(purgeRes.ok()).toBeTruthy();
+    const json = await purgeRes.json();
+    expect(json.success).toBe(true);
+    expect(json.auditLogId).toBeDefined();
+  });
 });

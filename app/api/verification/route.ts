@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "userId and flightId are required" },
         { status: 400 }
+      );
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot verify boarding pass for another user" },
+        { status: 403 }
       );
     }
 
@@ -56,6 +65,16 @@ export async function POST(req: NextRequest) {
           verifiedAt: new Date(),
         },
       });
+    }
+
+    // Mark passenger gender verified upon successful boarding pass verification
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { genderVerified: true },
+      });
+    } catch (uErr) {
+      console.warn("Failed to update user genderVerified status:", uErr);
     }
 
     // Record explicit purpose consent under DPDP Act for passenger travel itinerary

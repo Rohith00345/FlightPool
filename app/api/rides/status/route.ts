@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,14 @@ export async function GET(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot access another user's ride status" },
+        { status: 403 }
+      );
     }
 
     // Find the latest active ride request for this user

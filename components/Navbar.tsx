@@ -1,14 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Plane, ShieldAlert, Car, LayoutDashboard } from "lucide-react";
 
 interface NavbarProps {
   onSOSClick?: () => void;
-  currentUser?: { name: string; phone: string } | null;
+  currentUser?: { name: string; phone: string; role?: string } | null;
 }
 
 export default function Navbar({ onSOSClick, currentUser }: NavbarProps) {
+  const pathname = usePathname();
+
+  // Role checks: Riders never see Admin/Driver staff links
+  const isRider = currentUser?.role === "RIDER";
+  const isAdmin = currentUser?.role === "ADMIN" || (pathname?.startsWith("/admin") && !isRider);
+  const isDriver = currentUser?.role === "DRIVER" || (pathname?.startsWith("/driver") && !isRider);
+
+  // When on the rider homepage or trip view, only display if the authenticated user is staff
+  const showDriverLink = !isRider && (isDriver || (isAdmin && pathname?.startsWith("/driver")));
+  const showAdminLink = !isRider && isAdmin;
+
   return (
     <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md text-white border-b border-slate-800 shadow-md">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
@@ -44,25 +56,29 @@ export default function Navbar({ onSOSClick, currentUser }: NavbarProps) {
             </button>
           )}
 
-          <Link
-            href="/driver"
-            id="nav-driver-link"
-            className="px-2 py-1 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors flex items-center gap-1 text-xs font-medium border border-transparent hover:border-slate-700"
-            title="Driver Portal"
-          >
-            <Car className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden xs:inline">Driver</span>
-          </Link>
+          {showDriverLink && (
+            <Link
+              href="/driver"
+              id="nav-driver-link"
+              className="px-2 py-1 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors flex items-center gap-1 text-xs font-medium border border-transparent hover:border-slate-700"
+              title="Driver Portal"
+            >
+              <Car className="w-3.5 h-3.5 text-slate-400" />
+              <span className="hidden xs:inline">Driver</span>
+            </Link>
+          )}
 
-          <Link
-            href="/admin"
-            id="nav-admin-link"
-            className="px-2 py-1 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors flex items-center gap-1 text-xs font-medium border border-transparent hover:border-slate-700"
-            title="Ops Dashboard"
-          >
-            <LayoutDashboard className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden xs:inline">Admin</span>
-          </Link>
+          {showAdminLink && (
+            <Link
+              href="/admin"
+              id="nav-admin-link"
+              className="px-2 py-1 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors flex items-center gap-1 text-xs font-medium border border-transparent hover:border-slate-700"
+              title="Ops Dashboard"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-400" />
+              <span className="hidden xs:inline">Admin</span>
+            </Link>
+          )}
         </div>
       </div>
     </header>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
@@ -9,6 +10,14 @@ export async function POST(
     const { id } = await params;
     const body = await req.json();
     const { userId, description, currentLat, currentLng } = body;
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && userId && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot trigger emergency SOS for another user" },
+        { status: 403 }
+      );
+    }
 
     const trip = await prisma.trip.findUnique({
       where: { id },

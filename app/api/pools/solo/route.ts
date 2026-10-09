@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes, MUMBAI_ZONES } from "@/lib/geo";
 import { calculateSoloFare, getTimeOfDayMultiplier } from "@/lib/pricing";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +16,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot trigger solo fallback for another rider" },
+        { status: 403 }
+      );
+    }
+
     const request = await prisma.rideRequest.findUnique({
       where: { id: rideRequestId },
       include: { flight: true },
@@ -22,6 +31,13 @@ export async function POST(req: NextRequest) {
 
     if (!request) {
       return NextResponse.json({ error: "Ride request not found" }, { status: 404 });
+    }
+
+    if (request.userId !== userId && (!session || session.role !== "ADMIN")) {
+      return NextResponse.json(
+        { error: "Forbidden: Ride request belongs to another user" },
+        { status: 403 }
+      );
     }
 
     if (action === "KEEP_WAITING") {

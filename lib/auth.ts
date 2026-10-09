@@ -12,32 +12,56 @@ export interface SessionPayload {
   exp: number; // Unix timestamp in ms
 }
 
-// In-memory rate limiting map for OTP requests (5 attempts per 10 minutes)
-interface RateLimitRecord {
-  count: number;
-  resetAt: number;
-}
-const otpRateLimitMap = new Map<string, RateLimitRecord>();
+import { prisma } from "@/lib/prisma";
 
-export function checkOtpRateLimit(identifier: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const record = otpRateLimitMap.get(identifier);
+export async function checkOtpRateLimit(identifier: string, ip?: string): Promise<{ allowed: boolean; remaining: number }> {
+  try {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const recentAttempts = await prisma.otpRequest.count({
+      where: {
+        phone: identifier,
+        consumedAt: null,
+        createdAt: { gte: tenMinutesAgo },
+      },
+    });
 
-  if (!record || now > record.resetAt) {
-    otpRateLimitMap.set(identifier, { count: 1, resetAt: now + 10 * 60 * 1000 });
-    return { allowed: true, remaining: 4 };
+    if (recentAttempts >= 5) {
+      return { allowed: false, remaining: 0 };
+    }
+
+    // Persist this attempt in the database
+    await prisma.otpRequest.create({
+      data: {
+        phone: identifier,
+        purpose: "login",
+        ip: ip || null,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    });
+
+    return { allowed: true, remaining: Math.max(0, 4 - recentAttempts) };
+  } catch (err) {
+    console.error("Database OTP rate limit check error:", err);
+    // Fail open safely if DB transient error, but log it
+    return { allowed: true, remaining: 5 };
   }
-
-  if (record.count >= 5) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  record.count += 1;
-  return { allowed: true, remaining: 5 - record.count };
 }
 
-export function resetOtpRateLimit(identifier: string): void {
-  otpRateLimitMap.delete(identifier);
+export async function consumeOtpInDatabase(identifier: string): Promise<void> {
+  try {
+    const latest = await prisma.otpRequest.findFirst({
+      where: { phone: identifier, consumedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    if (latest) {
+      await prisma.otpRequest.update({
+        where: { id: latest.id },
+        data: { consumedAt: new Date() },
+      });
+    }
+  } catch (err) {
+    console.warn("Failed to mark OTP consumed:", err);
+  }
 }
 
 /**
@@ -88,7 +112,15 @@ export function verifySessionToken(token: string): SessionPayload | null {
  * Extracts and verifies session from NextRequest or standard Request
  */
 export function getSessionFromRequest(req: NextRequest | Request): SessionPayload | null {
-  // 1. Check Cookie
+  // 1. Check Authorization Bearer header first (explicit credential takes precedence)
+  const authHeader = req.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    const session = verifySessionToken(token);
+    if (session) return session;
+  }
+
+  // 2. Check Cookie
   const cookieHeader = req.headers.get("cookie");
   if (cookieHeader) {
     const cookies = Object.fromEntries(
@@ -101,14 +133,6 @@ export function getSessionFromRequest(req: NextRequest | Request): SessionPayloa
       const session = verifySessionToken(cookies[COOKIE_NAME]);
       if (session) return session;
     }
-  }
-
-  // 2. Check Authorization Bearer header
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.substring(7);
-    const session = verifySessionToken(token);
-    if (session) return session;
   }
 
   // 3. Demo Mode Header / Key (allows reviewers & automated E2E testing to simulate roles without credentials leak)

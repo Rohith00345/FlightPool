@@ -12,7 +12,8 @@ model User {
   name          String
   phone         String    @unique
   email         String?   @unique
-  gender        String    @default("UNSPECIFIED") // MALE, FEMALE, OTHER, UNSPECIFIED
+  gender        String    @default("PREFER_NOT_TO_SAY") // MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY, UNSPECIFIED
+  genderVerified Boolean  @default(false)
   role          String    @default("RIDER")       // RIDER, DRIVER, ADMIN
   avatarUrl     String?
   createdAt     DateTime  @default(now())
@@ -386,4 +387,18 @@ model DriverIncentive {
   type        String   // "guarantee_topup", "peak_bonus"
   amountPaise Int
   createdAt   DateTime @default(now())
+}
+
+model OtpRequest {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String    @default("123456")
+  purpose    String    @default("login")
+  attempts   Int       @default(0)
+  ip         String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }

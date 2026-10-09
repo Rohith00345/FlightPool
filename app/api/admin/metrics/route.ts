@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const auth = requireRole(req, ["ADMIN", "DRIVER"]);
+  const auth = requireRole(req, ["ADMIN"]);
   if (auth.response) {
     return auth.response;
   }

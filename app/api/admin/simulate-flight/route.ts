@@ -10,6 +10,13 @@ export async function POST(req: NextRequest) {
     return auth.response;
   }
 
+  if (process.env.DEMO_MODE === "false") {
+    return NextResponse.json(
+      { error: "Forbidden", message: "Flight simulation is only permitted when DEMO_MODE=true" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const { flightNumber } = body;

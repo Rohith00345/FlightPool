@@ -50,6 +50,7 @@ interface UserProfile {
   name: string;
   phone: string;
   gender: string;
+  genderVerified?: boolean;
   role: string;
 }
 
@@ -516,20 +517,20 @@ export default function Home() {
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">
                   Gender (Used for Women-Only Pool Preference)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setGenderInput("MALE");
                       setWomenOnly(false);
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
+                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
                       genderInput === "MALE"
                         ? "bg-slate-900 text-white border-slate-900 shadow-xs"
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    Male Passenger
+                    Male
                   </button>
                   <button
                     type="button"
@@ -537,13 +538,27 @@ export default function Home() {
                       setGenderInput("FEMALE");
                       setWomenOnly(true);
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
+                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
                       genderInput === "FEMALE"
                         ? "bg-rose-600 text-white border-rose-600 shadow-xs"
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    Female Passenger 🌸
+                    Female 🌸
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGenderInput("PREFER_NOT_TO_SAY");
+                      setWomenOnly(false);
+                    }}
+                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                      genderInput === "PREFER_NOT_TO_SAY"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Prefer not to say
                   </button>
                 </div>
               </div>
@@ -920,7 +935,12 @@ export default function Home() {
                   <div className="flex items-center gap-2.5">
                     <span className="text-lg">🌸</span>
                     <div>
-                      <span className="text-xs font-bold text-rose-950">Women-Only Pool</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-rose-950">Women-Only Pool</span>
+                        <span className="text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                          ✓ Verified Female
+                        </span>
+                      </div>
                       <p className="text-[10px] text-rose-700">Strictly match with verified female co-passengers</p>
                     </div>
                   </div>

@@ -59,55 +59,49 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ---
 
-## Phase 2: Data Foundation & Schema Expansion (schema.sql alignment)
+## Phase 2: Data Foundation, Schema Expansion, Hardening & Security
 
 - **Status**: Completed ✅
 - **Branch**: `production-upgrade`
 - **Files Touched**:
-  - `prisma/schema.prisma`: Added 12 production models (`Airport`, `Terminal`, `PickupBay`, `Zone`, `PricingRule`, `Consent`, `AuditLog`, `SosEvent`, `LedgerAccount`, `LedgerEntry`, `Payout`, `DriverIncentive`). Added `version` (optimistic locking) and `corridor` to `Pool`.
-  - `prisma/seed.ts`: Added seeding for Mumbai Airport (BOM), Terminals (T1, T2), 6 pickup bays, 6 destination zones across 3 corridors, default pricing rules with integer paise (12000 paise base, 1800 paise/km), and platform double-entry ledger accounts.
-  - `app/api/admin/metrics/route.ts`: Converted static average wait time metric into dynamic database calculation querying passenger request ready times.
+  - `prisma/schema.prisma`: Added 13 production models (`Airport`, `Terminal`, `PickupBay`, `Zone`, `PricingRule`, `Consent`, `AuditLog`, `SosEvent`, `LedgerAccount`, `LedgerEntry`, `Payout`, `DriverIncentive`, `OtpRequest`). Added `version` (optimistic locking), `corridor` to `Pool`, and `genderVerified` to `User`.
+  - `prisma/migrations/20261010023800_init_postgresql/migration.sql`: Generated and committed versioned PostgreSQL migration replacing `prisma db push`.
+  - `lib/auth.ts`: Implemented database-backed OTP rate limiter (`OtpRequest` table, max 5 unconsumed attempts per 10-minute window), HMAC-signed base64url session token system with prioritized Bearer token extraction, and `requireRole` RBAC helper.
+  - `app/api/auth/otp/route.ts`: Database rate limiting integration, DEMO_MODE toggle verification, 3-way gender support (`PREFER_NOT_TO_SAY`), and `genderVerified` marking.
+  - `app/api/admin/metrics/route.ts`: Protected endpoint restricted to `ADMIN` role.
+  - `app/api/admin/simulate-flight/route.ts`: Protected endpoint restricted to `ADMIN` role and requires `DEMO_MODE=true`.
+  - `app/api/admin/retention/route.ts` & `lib/retention.ts` & `scripts/retention-job.ts`: Automated data retention background job purging expired OTP requests (>24h), stale cancelled ride requests (>30d), and historical audit logs (>90d). Added npm script `"job:retention"`.
+  - `app/api/driver/trips/route.ts`: Created dedicated driver portal trip endpoint requiring `DRIVER` role.
+  - `app/api/rides/status/route.ts`, `app/api/rides/request/route.ts`, `app/api/pools/confirm/route.ts`, `app/api/pools/leave/route.ts`, `app/api/pools/solo/route.ts`, `app/api/trips/[id]/route.ts`: Audited and secured every rider and driver route with strict ownership checks (rider can only access their own records; driver only their assigned trips).
+  - `app/api/rides/request/route.ts` & `app/page.tsx`: Strict verification step for women-only pools (`gender === "FEMALE"` and `genderVerified === true`).
+  - `app/page.tsx`: Added 3-way gender toggle (`Male`, `Female 🌸`, `Prefer not to say`) and verified female status badge.
+  - `app/admin/page.tsx` & `app/driver/page.tsx`: Quick persona sign-in conditioned strictly on `DEMO_MODE=true`.
+  - `components/Navbar.tsx`: Hidden `/admin` and `/driver` internal staff navigation links from riders.
+  - `app/layout.tsx`: Removed `maximumScale: 1` and `userScalable: false` for WCAG 2.1 AA accessibility compliance.
+  - `next.config.ts`: Added full production security headers (`Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+  - `.gitignore`: Untracked `prisma/dev.db` and added `*.db` patterns.
+  - `tests/e2e/security-rbac.spec.ts`: Expanded to 11 comprehensive tests verifying RBAC, cross-user access rejection (403), women-only restriction (400), OTP rate limiting (429), consent capture, and DPDP data purge.
 - **Verification**:
-  - PostgreSQL schema pushed and synced with 25 tables in public schema.
-  - Seed executed successfully with all relation constraints verified.
-  - Vitest: 25/25 passing (327ms).
-  - Playwright E2E: 5/5 passing (6.6s).
+  - Vitest Unit Tests: 25/25 passing (100%).
+  - Playwright E2E Tests: 16/16 passing (100% across `flightpool.spec.ts` and `security-rbac.spec.ts`).
   - TypeScript (`tsc --noEmit`): 0 errors.
-
----
-
-## Phase 3: Auth, RBAC, Security & Compliance (Phase B)
-
-- **Status**: Completed ✅
-- **Branch**: `production-upgrade`
-- **Files Touched**:
-  - `lib/auth.ts` (created): Implemented HMAC-signed base64url session token system, rate limiting (max 5 requests per 10 min window), cookie extraction, Bearer token extraction, and `requireRole` RBAC helper.
-  - `app/api/auth/otp/route.ts`: Integrated rate limiter, signed session token creation, and secure HTTP-only session cookie (`flightpool_session`) dispatch.
-  - `app/api/admin/metrics/route.ts`: Protected endpoint with `requireRole(req, ["ADMIN", "DRIVER"])` returning 401/403 for unauthenticated anonymous callers.
-  - `app/api/admin/simulate-flight/route.ts`: Protected endpoint with `requireRole(req, ["ADMIN"])` and integrated automated `AuditLog` generation on PostgreSQL.
-  - `app/api/verification/route.ts`: Implemented explicit purpose consent logging (`Consent` model in PostgreSQL) upon passenger boarding pass verification under DPDP guidelines.
-  - `app/api/user/delete-data/route.ts` (created): Implemented DPDP Act "Delete My Data" endpoint to scrub sensitive travel verifications and anonymize passenger records.
-  - `app/admin/page.tsx`: Added unauthorized detection banner with 1-click admin sign-in mechanism.
-  - `app/driver/page.tsx`: Added unauthorized detection banner with 1-click driver sign-in mechanism.
-  - `tests/e2e/security-rbac.spec.ts` (created): Added 5 comprehensive Playwright tests verifying anonymous blocking (401/403), authenticated admin access, audit log creation, passenger consent capture, and DPDP data purge.
-- **Verification**:
-  - Vitest: 25/25 passing (395ms).
-  - Playwright E2E: 10/10 passing (7.7s) across `flightpool.spec.ts` and `security-rbac.spec.ts`.
   - Next.js Production Build (`npm run build`): Completed with 0 errors.
-  - TypeScript (`tsc --noEmit`): 0 errors.
 
 ---
 
-## Phase 4: Core Pool Engine, Concurrency, Optimistic Locking & Live SSE Updates (Phase C)
+## Phase 3: Pool Engine Reliability (Next Phase)
 
-- **Status**: Ready to Implement
-- **Objectives**:
-  1. Optimistic Concurrency Control on Pools:
-     - Utilize `pools.version` in `/api/pools/match` and `/api/pools/confirm` to prevent race conditions during rapid concurrent passenger joins.
-  2. Server-Sent Events (SSE) Stream:
-     - Implement `/api/pools/[id]/stream` and `/api/trips/[id]/stream` using HTTP text/event-stream for live co-rider radar and GPS updates.
-  3. Wait-Cap Background Evaluator:
-     - Server-side check at `wait_cap_at` to trigger automatic solo fallback transition or keep-waiting extension.
+- **Status**: Ready to Implement 🚀
+- **Scope (Aligned with Mega Prompt)**:
+  1. **Optimistic Locking**:
+     - Concurrency control on `pools.version` to prevent race conditions during rapid concurrent passenger joins (`UPDATE pools SET version = version + 1 WHERE id = $1 AND version = $2`).
+  2. **Server-Side Wait-Cap and Expiry Jobs**:
+     - Background evaluation of passenger wait caps (default 20 minutes) to transition unpooled riders to solo fallback or extend wait time.
+  3. **Fare Quote Records (`FareQuote` model)**:
+     - Persisted fare quotes ensuring guaranteed upfront fare calculations remain tamper-proof from quote to payment.
+  4. **Server-Sent Events (SSE)**:
+     - Real-time updates via `/api/pools/[id]/stream` and `/api/trips/[id]/stream` using standard HTTP text/event-stream for live radar and driver tracking.
+
 
 
 

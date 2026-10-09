@@ -13,7 +13,7 @@ export default function DriverViewPage() {
   const fetchTrips = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/admin/metrics");
+      const res = await fetch("/api/driver/trips");
       if (res.status === 401 || res.status === 403) {
         setUnauthorized(true);
         setTrips([]);
@@ -102,12 +102,16 @@ export default function DriverViewPage() {
               <h4 className="text-sm font-bold text-slate-900">Driver Sign-In Required (RBAC)</h4>
               <p className="text-xs text-slate-500 mt-1">Access to airport queue assignments and trip manifests requires active driver authorization.</p>
             </div>
-            <button
-              onClick={handleDriverLogin}
-              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition mt-1"
-            >
-              Sign In as Ramesh Shinde (+919820011223)
-            </button>
+            {process.env.NEXT_PUBLIC_DEMO_MODE !== "false" ? (
+              <button
+                onClick={handleDriverLogin}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition mt-1"
+              >
+                Sign In as Ramesh Shinde (Demo Persona)
+              </button>
+            ) : (
+              <p className="text-xs text-amber-800 font-semibold mt-1">Production Mode Active: Driver hardware/token auth required.</p>
+            )}
           </div>
         )}
 

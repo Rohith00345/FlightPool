@@ -12,9 +12,10 @@
     "simulate": "tsx scripts/simulate.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
-    "db:reset": "prisma db push --force-reset && prisma db seed",
-    "db:migrate": "prisma db push",
-    "db:seed": "prisma db seed"
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset --force",
+    "db:seed": "prisma db seed",
+    "job:retention": "tsx scripts/retention-job.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { defaultPaymentProvider } from "@/lib/payments/provider";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,6 +12,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "poolId and userId are required" },
         { status: 400 }
+      );
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot confirm pool for another rider" },
+        { status: 403 }
       );
     }
 
