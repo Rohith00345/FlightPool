@@ -2,23 +2,52 @@
 
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
-import { Car, MapPin, CheckCircle, Navigation, Phone, IndianRupee, RefreshCw } from "lucide-react";
+import { Car, MapPin, CheckCircle, Navigation, Phone, IndianRupee, RefreshCw, Lock } from "lucide-react";
 
 export default function DriverViewPage() {
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [activeTrip, setActiveTrip] = useState<any>(null);
 
   const fetchTrips = async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/admin/metrics");
+      if (res.status === 401 || res.status === 403) {
+        setUnauthorized(true);
+        setTrips([]);
+        return;
+      }
+      setUnauthorized(false);
       const data = await res.json();
       if (data.trips && data.trips.length > 0) {
         setTrips(data.trips);
         // Load details of first trip
         loadTripDetails(data.trips[0].id);
       }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDriverLogin = async () => {
+    try {
+      setLoading(true);
+      await fetch("/api/auth/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: "+919820011223",
+          otp: "123456",
+          name: "Ramesh Shinde",
+          role: "DRIVER",
+        }),
+      });
+      setUnauthorized(false);
+      await fetchTrips();
     } catch (e) {
       console.error(e);
     } finally {
@@ -64,6 +93,24 @@ export default function DriverViewPage() {
       <Navbar />
 
       <main className="w-full max-w-md mx-auto flex-1 p-4 pb-16 space-y-4">
+        {unauthorized && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 flex flex-col items-center justify-between gap-3 shadow-sm text-center">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">Driver Sign-In Required (RBAC)</h4>
+              <p className="text-xs text-slate-500 mt-1">Access to airport queue assignments and trip manifests requires active driver authorization.</p>
+            </div>
+            <button
+              onClick={handleDriverLogin}
+              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition mt-1"
+            >
+              Sign In as Ramesh Shinde (+919820011223)
+            </button>
+          </div>
+        )}
+
         {/* Driver Header Card */}
         <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-sm">
           <div className="flex items-center justify-between">

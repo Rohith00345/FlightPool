@@ -58,6 +58,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Record explicit purpose consent under DPDP Act for passenger travel itinerary
+    try {
+      await prisma.consent.create({
+        data: {
+          userId,
+          purpose: "boarding_pass_data",
+          version: "1.0",
+          ip: req.headers.get("x-forwarded-for") || "127.0.0.1",
+        },
+      });
+    } catch (consentErr) {
+      console.warn("Failed to record passenger consent:", consentErr);
+    }
+
     return NextResponse.json({
       success: true,
       verification: {

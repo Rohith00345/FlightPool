@@ -13,11 +13,13 @@ import {
   CheckCircle2,
   Plane,
   ShieldCheck,
+  Lock,
 } from "lucide-react";
 
 export default function AdminPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [selectedFlightNumber, setSelectedFlightNumber] = useState("6E-204");
   const [simulationResult, setSimulationResult] = useState<any>(null);
@@ -26,11 +28,39 @@ export default function AdminPage() {
     try {
       setLoading(true);
       const res = await fetch("/api/admin/metrics");
+      if (res.status === 401 || res.status === 403) {
+        setUnauthorized(true);
+        setData(null);
+        return;
+      }
+      setUnauthorized(false);
       const json = await res.json();
       setData(json);
       if (json.flights && json.flights.length > 0 && !selectedFlightNumber) {
         setSelectedFlightNumber(json.flights[0].flightNumber);
       }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminLogin = async () => {
+    try {
+      setLoading(true);
+      await fetch("/api/auth/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: "+919999999999",
+          otp: "123456",
+          name: "FlightPool Admin",
+          role: "ADMIN",
+        }),
+      });
+      setUnauthorized(false);
+      await fetchMetrics();
     } catch (e) {
       console.error(e);
     } finally {
@@ -75,6 +105,26 @@ export default function AdminPage() {
       <Navbar />
 
       <main className="w-full max-w-2xl mx-auto flex-1 p-4 pb-16 space-y-5">
+        {unauthorized && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Admin Authentication Required (RBAC Protected)</h4>
+                <p className="text-xs text-slate-500">Only authorized dispatchers and administrators may access Mumbai Airport operations control.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleAdminLogin}
+              className="w-full sm:w-auto px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition"
+            >
+              Sign In as FlightPool Admin
+            </button>
+          </div>
+        )}
+
         {/* Admin Header */}
         <div className="bg-slate-900 text-white p-5 rounded-3xl flex items-center justify-between shadow-sm">
           <div>

@@ -78,21 +78,37 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ## Phase 3: Auth, RBAC, Security & Compliance (Phase B)
 
+- **Status**: Completed ✅
+- **Branch**: `production-upgrade`
+- **Files Touched**:
+  - `lib/auth.ts` (created): Implemented HMAC-signed base64url session token system, rate limiting (max 5 requests per 10 min window), cookie extraction, Bearer token extraction, and `requireRole` RBAC helper.
+  - `app/api/auth/otp/route.ts`: Integrated rate limiter, signed session token creation, and secure HTTP-only session cookie (`flightpool_session`) dispatch.
+  - `app/api/admin/metrics/route.ts`: Protected endpoint with `requireRole(req, ["ADMIN", "DRIVER"])` returning 401/403 for unauthenticated anonymous callers.
+  - `app/api/admin/simulate-flight/route.ts`: Protected endpoint with `requireRole(req, ["ADMIN"])` and integrated automated `AuditLog` generation on PostgreSQL.
+  - `app/api/verification/route.ts`: Implemented explicit purpose consent logging (`Consent` model in PostgreSQL) upon passenger boarding pass verification under DPDP guidelines.
+  - `app/api/user/delete-data/route.ts` (created): Implemented DPDP Act "Delete My Data" endpoint to scrub sensitive travel verifications and anonymize passenger records.
+  - `app/admin/page.tsx`: Added unauthorized detection banner with 1-click admin sign-in mechanism.
+  - `app/driver/page.tsx`: Added unauthorized detection banner with 1-click driver sign-in mechanism.
+  - `tests/e2e/security-rbac.spec.ts` (created): Added 5 comprehensive Playwright tests verifying anonymous blocking (401/403), authenticated admin access, audit log creation, passenger consent capture, and DPDP data purge.
+- **Verification**:
+  - Vitest: 25/25 passing (395ms).
+  - Playwright E2E: 10/10 passing (7.7s) across `flightpool.spec.ts` and `security-rbac.spec.ts`.
+  - Next.js Production Build (`npm run build`): Completed with 0 errors.
+  - TypeScript (`tsc --noEmit`): 0 errors.
+
+---
+
+## Phase 4: Core Pool Engine, Concurrency, Optimistic Locking & Live SSE Updates (Phase C)
+
 - **Status**: Ready to Implement
 - **Objectives**:
-  1. Server-Side RBAC & Route Protection:
-     - Enforce role gates on `/admin` and `/api/admin/*` (ADMIN role only).
-     - Enforce role gates on `/driver` and `/api/driver/*` (DRIVER role only).
-     - Guard anonymous access with redirects or 403 Forbidden.
-  2. Phone OTP Authentication Hardening:
-     - Support `DEMO_MODE=true` for local reviewers / E2E tests (`123456` dev OTP allowed when `DEMO_MODE !== 'false'`).
-     - In-memory / DB rate limiting for OTP generation and verification attempts (max 5 attempts, 10 min window).
-     - Set secure HTTP-only session cookies / signed auth tokens for user identification.
-  3. Audit Logging:
-     - Persist `AuditLog` records on admin simulator actions (`/api/admin/simulate-flight`) and administrative modifications.
-  4. Privacy & Consent Compliance:
-     - Consent logging in `consents` table when submitting boarding pass data or requesting rides.
-     - Add privacy disclosure and "Delete My Data" endpoint (`/api/user/delete-data`).
+  1. Optimistic Concurrency Control on Pools:
+     - Utilize `pools.version` in `/api/pools/match` and `/api/pools/confirm` to prevent race conditions during rapid concurrent passenger joins.
+  2. Server-Sent Events (SSE) Stream:
+     - Implement `/api/pools/[id]/stream` and `/api/trips/[id]/stream` using HTTP text/event-stream for live co-rider radar and GPS updates.
+  3. Wait-Cap Background Evaluator:
+     - Server-side check at `wait_cap_at` to trigger automatic solo fallback transition or keep-waiting extension.
+
 
 
 

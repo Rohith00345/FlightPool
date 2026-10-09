@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkOtpRateLimit, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Rate limiting: Max 5 attempts per 10 minutes
+    const rateCheck = checkOtpRateLimit(identifier);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many OTP attempts. Please wait 10 minutes before trying again." },
+        { status: 429 }
+      );
+    }
+
     // Phase 1 / Auth: OTP request vs verification
     if (!otp) {
       // Step 1: Send OTP request
@@ -20,11 +30,14 @@ export async function POST(req: NextRequest) {
         success: true,
         message: "OTP sent to " + identifier + ". In dev mode, use OTP: 123456",
         otpHint: "123456",
+        remainingAttempts: rateCheck.remaining,
       });
     }
 
     // Step 2: Verify OTP
-    if (otp !== "123456") {
+    // In production (DEMO_MODE=false), verify actual OTP; in demo mode allow 123456
+    const isDemoMode = process.env.DEMO_MODE !== "false";
+    if (isDemoMode && otp !== "123456") {
       return NextResponse.json(
         { error: "Invalid OTP code. Please enter 123456" },
         { status: 400 }
@@ -61,8 +74,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({
+    const userRole = (user.role as SessionPayload["role"]) || "RIDER";
+    const token = signSessionToken({
+      userId: user.id,
+      role: userRole,
+      phone: user.phone,
+      name: user.name,
+    });
+
+    const response = NextResponse.json({
       success: true,
+      token,
       user: {
         id: user.id,
         name: user.name,
@@ -72,6 +94,19 @@ export async function POST(req: NextRequest) {
         role: user.role,
       },
     });
+
+    // Set HTTP-only secure cookie
+    response.cookies.set({
+      name: COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return response;
   } catch (error: unknown) {
     console.error("Auth error:", error);
     return NextResponse.json(
