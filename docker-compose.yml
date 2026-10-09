@@ -1,0 +1,19 @@
+services:
+  flightpool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flightpool-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - DATABASE_URL=file:/app/prisma/dev.db
+    restart: unless-stopped
+    volumes:
+      - flightpool-data:/app/prisma
+
+volumes:
+  flightpool-data:

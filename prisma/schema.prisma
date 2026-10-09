@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  phone         String    @unique
+  email         String?   @unique
+  gender        String    @default("UNSPECIFIED") // MALE, FEMALE, OTHER, UNSPECIFIED
+  role          String    @default("RIDER")       // RIDER, DRIVER, ADMIN
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  rideRequests  RideRequest[]
+  poolMembers   PoolMember[]
+  verifications PassengerVerification[]
+  payments      Payment[]
+  ratingsGiven  Rating[]                @relation("UserRatingsGiven")
+  ratingsReceived Rating[]              @relation("UserRatingsReceived")
+  incidents     Incident[]
+}
+
+model Flight {
+  id            String    @id @default(cuid())
+  flightNumber  String    @unique
+  airline       String
+  origin        String
+  destination   String    @default("BOM")
+  arrivalTime   DateTime
+  terminal      String    // T1, T2
+  status        String    @default("SCHEDULED") // SCHEDULED, LANDED, DELAYED, ON_TIME
+  createdAt     DateTime  @default(now())
+
+  rideRequests  RideRequest[]
+  verifications PassengerVerification[]
+}
+
+model PassengerVerification {
+  id               String    @id @default(cuid())
+  userId           String
+  flightId         String
+  boardingPassCode String    @unique
+  pnr              String
+  seatNumber       String
+  status           String    @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flight           Flight    @relation(fields: [flightId], references: [id], onDelete: Cascade)
+}
+
+model RideRequest {
+  id                 String       @id @default(cuid())
+  userId             String
+  flightId           String
+  destinationZone    String       // e.g. Thane, Mulund, Powai, Bandra, Andheri, Navi Mumbai
+  destinationAddress String
+  destinationLat     Float
+  destinationLng     Float
+  luggageCount       Int          @default(1)
+  womenOnly          Boolean      @default(false)
+  readyTime          DateTime?
+  status             String       @default("SEARCHING") // SEARCHING, POOLING, CONFIRMED, SOLO, CANCELLED, COMPLETED
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flight             Flight       @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  poolMembers        PoolMember[]
+}
+
+model Pool {
+  id                 String       @id @default(cuid())
+  targetFlightId     String?
+  destinationCluster String?
+  terminal           String       @default("T2") // T1 or T2
+  status             String       @default("FORMING") // FORMING, CONFIRMED, COMPLETED, CANCELLED
+  maxDetourMinutes   Int          @default(20)
+  waitCapExpiry      DateTime?
+  vehicleId          String?
+  driverId           String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  vehicle            Vehicle?     @relation(fields: [vehicleId], references: [id])
+  driver             Driver?      @relation(fields: [driverId], references: [id])
+  members            PoolMember[]
+  trip               Trip?
+  incidents          Incident[]
+}
+
+model PoolMember {
+  id             String      @id @default(cuid())
+  poolId         String
+  rideRequestId  String
+  userId         String
+  pickupOrder    Int         @default(1)
+  dropoffOrder   Int         @default(1)
+  soloFare       Float       @default(0)
+  poolFare       Float       @default(0)
+  savingsPct     Float       @default(30)
+  detourMinutes  Float       @default(0)
+  status         String      @default("WAITING") // WAITING, CONFIRMED, PICKED_UP, DROPPED_OFF, CANCELLED
+  joinedAt       DateTime    @default(now())
+
+  pool           Pool        @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  rideRequest    RideRequest @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments       Payment[]
+}
+
+model Vehicle {
+  id              String   @id @default(cuid())
+  make            String
+  model           String
+  licensePlate    String   @unique
+  color           String   @default("White")
+  capacitySeats   Int      @default(4)
+  capacityLuggage Int      @default(4)
+  type            String   @default("SEDAN") // SEDAN, SUV, EV
+  createdAt       DateTime @default(now())
+
+  drivers         Driver[]
+  pools           Pool[]
+  trips           Trip[]
+}
+
+model Driver {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   @unique
+  rating      Float    @default(4.9)
+  photoUrl    String?
+  isAvailable Boolean  @default(true)
+  currentLat  Float    @default(19.0968)
+  currentLng  Float    @default(72.8750)
+  vehicleId   String?
+  createdAt   DateTime @default(now())
+
+  vehicle     Vehicle? @relation(fields: [vehicleId], references: [id])
+  pools       Pool[]
+  trips       Trip[]
+}
+
+model Trip {
+  id               String     @id @default(cuid())
+  poolId           String     @unique
+  driverId         String
+  vehicleId        String
+  status           String     @default("ASSIGNED") // ASSIGNED, EN_ROUTE_PICKUP, IN_TRANSIT, COMPLETED, CANCELLED
+  otpCode          String     @default("1234")
+  startTime        DateTime?
+  endTime          DateTime?
+  totalDistanceKm  Float      @default(0)
+  totalDurationMin Float      @default(0)
+  totalFare        Float      @default(0)
+  driverPayout     Float      @default(0)
+  platformFee      Float      @default(0)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  pool             Pool       @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  driver           Driver     @relation(fields: [driverId], references: [id])
+  vehicle          Vehicle    @relation(fields: [vehicleId], references: [id])
+  payments         Payment[]
+  ratings          Rating[]
+  incidents        Incident[]
+}
+
+model Payment {
+  id             String      @id @default(cuid())
+  tripId         String?
+  poolMemberId   String?
+  userId         String
+  amount         Float
+  currency       String      @default("INR")
+  status         String      @default("PENDING") // PENDING, AUTHORIZED, CAPTURED, REFUNDED, FAILED
+  provider       String      @default("RAZORPAY_MOCK")
+  idempotencyKey String      @unique
+  paymentMethod  String      @default("UPI")     // UPI, CARD, NETBANKING
+  transactionRef String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip           Trip?       @relation(fields: [tripId], references: [id])
+  poolMember     PoolMember? @relation(fields: [poolMemberId], references: [id])
+}
+
+model Rating {
+  id                      String   @id @default(cuid())
+  tripId                  String
+  raterUserId             String
+  ratedUserIdOrDriverId   String
+  score                   Int      @default(5)
+  tags                    String   @default("") // comma-separated e.g. "polite,punctual"
+  comment                 String?
+  createdAt               DateTime @default(now())
+
+  trip                    Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  rater                   User     @relation("UserRatingsGiven", fields: [raterUserId], references: [id], onDelete: Cascade)
+  ratedUser               User?    @relation("UserRatingsReceived", fields: [ratedUserIdOrDriverId], references: [id])
+}
+
+model Incident {
+  id          String    @id @default(cuid())
+  tripId      String?
+  userId      String?
+  poolId      String?
+  type        String    @default("SOS") // SOS, DELAY, MISMATCH, HARASSMENT, OTHER
+  description String
+  status      String    @default("ACTIVE") // ACTIVE, RESOLVED
+  severity    String    @default("HIGH") // HIGH, MEDIUM, LOW
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  trip        Trip?     @relation(fields: [tripId], references: [id])
+  user        User?     @relation(fields: [userId], references: [id])
+  pool        Pool?     @relation(fields: [poolId], references: [id])
+}
