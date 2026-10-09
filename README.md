@@ -2,6 +2,24 @@
 
 > **Mobile-first PWA for Mumbai Airport (BOM) passengers to share cabs and split fares to nearby destination corridors.**
 
+[![Live on Vercel](https://img.shields.io/badge/Vercel-Live%20Demo-black?logo=vercel)](https://flight-pool-red.vercel.app/)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Rohith00345%2FFlightPool-181717?logo=github)](https://github.com/Rohith00345/FlightPool)
+[![Tests: Vitest 25/25](https://img.shields.io/badge/Vitest-25%2F25%20Passed-green?logo=vitest)](https://github.com/Rohith00345/FlightPool)
+[![E2E: Playwright 5/5](https://img.shields.io/badge/Playwright-5%2F5%20Passed-blue?logo=playwright)](https://github.com/Rohith00345/FlightPool)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.4.0%20(Turbopack)-black?logo=next.js)](https://nextjs.org/)
+
+---
+
+## 🌐 Live Deployment Links
+
+Experience FlightPool in action on Vercel:
+
+| Interface | URL | Description |
+| :--- | :--- | :--- |
+| 📱 **Passenger PWA** | [flight-pool-red.vercel.app](https://flight-pool-red.vercel.app/) | Mobile-first onboarding, flight verification, corridor map, pool match & OTP authorization. |
+| 📊 **Admin & Ops Dashboard** | [flight-pool-red.vercel.app/admin](https://flight-pool-red.vercel.app/admin) | Live KPI metrics (Match Rate, Fill Rate, Payouts), safety logs, and interactive "Land a Flight" simulator. |
+| 🚕 **Driver Portal** | [flight-pool-red.vercel.app/driver](https://flight-pool-red.vercel.app/driver) | Turn-by-turn pickup/drop route sequence, passenger OTP validation & 85% transparent payout. |
+
 ---
 
 ## 🌟 Key Features
@@ -17,7 +35,7 @@
   - **Penalty-Free Cancellation**: Leave a forming pool anytime before driver dispatch.
   - **Emergency SOS**: Alerts Mumbai Airport Security & Mumbai Police (112) with instant emergency dialer.
   - **Live Trip Sharing**: Shareable tracking links for friends and family.
-- 💳 **Mock Razorpay Flow**: Interface-driven payment lifecycle (Authorization on pool confirmation -> Capture on drop-off completion -> Instant refund on pool collapse).
+- 💳 **Mock Razorpay Flow**: Interface-driven payment lifecycle (`PaymentProvider`: Authorization on pool confirmation -> Capture on drop-off completion -> Instant refund on pool collapse).
 - 📊 **Admin Operations Dashboard (`/admin`)**: Real-time KPI metrics (Match rate, Fill rate, Avg wait, Avg detour, Revenue) and an interactive **"Land a Flight"** simulation panel.
 - 🚕 **Driver View (`/driver`)**: Ordered pickup/drop route sequence, OTP validation, and payout tracking.
 
@@ -28,7 +46,7 @@
 ```mermaid
 flowchart TD
     subgraph Client [Mobile PWA - Next.js App Router]
-        UI[Rider Interface]
+        UI[Rider Interface /]
         Map[Leaflet Corridor Map]
         DriverUI[Driver Portal /driver]
         AdminUI[Admin Dashboard /admin]
@@ -63,7 +81,7 @@ flowchart TD
 
 ---
 
-## 🚀 Quickstart & Setup
+## 🚀 Quickstart & Local Setup
 
 ### Prerequisites
 - Node.js 18+ (tested on Node v20 LTS)
@@ -71,7 +89,8 @@ flowchart TD
 
 ### 1. Clone & Install Dependencies
 ```bash
-cd flightpool
+git clone https://github.com/Rohith00345/FlightPool.git
+cd FlightPool
 npm install
 ```
 
@@ -92,16 +111,17 @@ Open **[http://localhost:3000](http://localhost:3000)** in your mobile device si
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing & Validation
 
 ### Vitest Unit Tests (Matching & Pricing Engines)
 Runs 25 comprehensive unit tests covering all matching constraints, detour permutations, women-only filters, mid-pool cancellations, and pricing rounding integrity:
 ```bash
 npm test
 ```
+*Result: 25/25 passing across `tests/matching.test.ts` and `tests/pricing.test.ts`.*
 
 ### Playwright E2E Tests
-Runs automated browser tests covering the 4 main end-to-end user journeys:
+Runs automated browser tests covering the core end-to-end user journeys:
 1. 3 riders match and complete full trip lifecycle
 2. Rider falls back to solo ride after wait cap
 3. Rider cancels mid-pool penalty-free
@@ -110,6 +130,7 @@ Runs automated browser tests covering the 4 main end-to-end user journeys:
 ```bash
 npm run test:e2e
 ```
+*Result: 5/5 passing across `tests/e2e/flightpool.spec.ts`.*
 
 ### Simulation CLI
 Replay a flight landing from terminal CLI to observe pool formation, route detour, and fare distribution:
@@ -125,9 +146,11 @@ npm run simulate AI-865
 
 ## 🎬 Reviewer Demo Script (End-to-End Walkthrough)
 
+You can run this demo either on **[https://flight-pool-red.vercel.app](https://flight-pool-red.vercel.app)** or locally at `http://localhost:3000`:
+
 1. **Rider Onboarding & Login**:
-   - Open `http://localhost:3000`.
-   - Click the **"Aarav Sharma"** quick-persona card (or enter any mobile number with OTP `123456`).
+   - Open `/` in a mobile viewport (e.g., iPhone 14 / 375px).
+   - Click the **"Aarav Sharma"** quick-persona card (or enter any mobile number with dev OTP `123456`).
    - Click **CONTINUE • आगे बढ़ें**.
 
 2. **Flight & Boarding Pass Verification**:
@@ -139,11 +162,11 @@ npm run simulate AI-865
 3. **Destination & Upfront Fare**:
    - Tap on the **Thane** zone chip (or click on the interactive Mumbai corridor map).
    - Notice the upfront fare card: **₹360 instead of ₹740 • Save ₹380 (51%)**.
-   - Choose luggage count (e.g. 1 bag).
+   - Choose luggage count (e.g., 1 bag).
    - Click **I'VE LANDED & READY • मैं तैयार हूँ**.
 
 4. **Pool Formation & Mock Payment**:
-   - View real-time pool formation with co-riders (e.g. Vikram Mehta, Rohan Kulkarni).
+   - View real-time pool formation with co-riders (e.g., Vikram Mehta, Rohan Kulkarni).
    - Notice other co-riders' exact addresses are masked to zone level for safety.
    - Click **CONFIRM & LOCK SHARE (₹360)**.
    - Select UPI (GPay/PhonePe) in the Razorpay sandbox modal and tap **AUTHORIZE ₹360**.
@@ -155,19 +178,19 @@ npm run simulate AI-865
    - Try the **Emergency SOS** button to view Mumbai Police (112) & Airport Security dispatch.
 
 6. **Driver Progression & Trip Completion**:
-   - In a new tab, navigate to `http://localhost:3000/driver`.
+   - In a new tab, navigate to `/driver`.
    - Click **En Route to Terminal Pickup** -> **All Passengers Boarded** -> **Complete All Drop-offs**.
-   - Payment is automatically captured, and driver sees transparent 85% payout (₹680).
+   - Payment is automatically captured, and driver sees transparent 85% payout.
 
 7. **Admin Dashboard & Flight Landing Simulator**:
-   - Navigate to `http://localhost:3000/admin`.
-   - View live KPI cards: **Match Rate (95%)**, **Fill Rate (2.4 riders/cab)**, **Avg Detour (+3.8m)**.
+   - Navigate to `/admin`.
+   - View live KPI cards: **Match Rate (75.8%+)**, **Fill Rate**, **Avg Detour**, **Total Fares Collected**.
    - Under the simulation panel, select **AI-865** or **UK-993** and click **Land Flight & Match Pools**.
-   - Watch newly formed pools appear instantly in the active pools table!
+   - Watch newly formed pools appear instantly in the active pools table.
 
 ---
 
-## 🐳 Production Docker & Cloud Deployment
+## 🐳 Docker & Cloud Deployment
 
 FlightPool includes a production multi-stage [Dockerfile](file:///C:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/Dockerfile) based on Node 20 Alpine with Next.js standalone output and pre-seeded SQLite database.
 
@@ -181,8 +204,8 @@ docker ps
 ```
 The app will be live at `http://localhost:3000`.
 
-### 2. Deploy to Render / Railway / Fly.io / Cloud Run
+### 2. Deploy to Vercel / Render / Railway / Cloud Run
+- **Vercel**: Deployed at `https://flight-pool-red.vercel.app/` with automatic Prisma client generation and serverless `/tmp` SQLite persistence fallback.
 - **Render**: Connect your GitHub repository and select **Web Service (Docker)** or use the included [render.yaml](file:///C:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/render.yaml).
-- **Railway**: Run `railway up` — Railway automatically detects the `Dockerfile` and deploys with persistent storage.
-- **Fly.io**: Run `fly launch` and select the generated Dockerfile.
+- **Railway**: Run `railway up` — Railway automatically detects the `Dockerfile`.
 - **Google Cloud Run**: Run `gcloud run deploy flightpool --source . --port 3000 --allow-unauthenticated`.
