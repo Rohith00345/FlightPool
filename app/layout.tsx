@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { isDemoMode } from "@/lib/demo";
 import "./globals.css";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "FlightPool • Mumbai Airport Cab Sharing (BOM)",
@@ -24,8 +27,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const demoActive = isDemoMode();
+
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" data-demo-mode={demoActive ? "true" : "false"}>
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
       </head>

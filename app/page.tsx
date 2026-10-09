@@ -8,6 +8,7 @@ import PaymentModal from "@/components/PaymentModal";
 import ShareTripModal from "@/components/ShareTripModal";
 import RatingModal from "@/components/RatingModal";
 import { MUMBAI_ZONES } from "@/lib/geo";
+import { isClientDemoMode } from "@/lib/demo";
 import {
   Plane,
   CheckCircle2,
@@ -65,15 +66,17 @@ interface FlightItem {
 }
 
 export default function Home() {
+  const demoMode = isClientDemoMode();
+
   // Step in Wizard: "AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE"
   const [step, setStep] = useState<"AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE">("AUTH");
 
   // User State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [phoneInput, setPhoneInput] = useState("+919810100001");
-  const [nameInput, setNameInput] = useState("Aarav Sharma");
+  const [phoneInput, setPhoneInput] = useState(demoMode ? "+919810100001" : "");
+  const [nameInput, setNameInput] = useState(demoMode ? "Aarav Sharma" : "");
   const [genderInput, setGenderInput] = useState("MALE");
-  const [otpInput, setOtpInput] = useState("123456");
+  const [otpInput, setOtpInput] = useState("");
   const [authError, setAuthError] = useState("");
 
   // Flight Selection
@@ -186,6 +189,9 @@ export default function Home() {
     setPhoneInput(phone);
     setGenderInput(gender);
     setWomenOnly(gender === "FEMALE");
+    if (demoMode) {
+      setOtpInput("123456");
+    }
   };
 
   // Step 1: Submit Auth
@@ -451,38 +457,40 @@ export default function Home() {
             </div>
 
             {/* Quick Demo Personas */}
-            <div className="mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                ⚡ Select Test Persona:
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
-                  className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
-                    nameInput === "Aarav Sharma"
-                      ? "border-teal-600 bg-teal-50/80 text-teal-900 font-semibold shadow-xs ring-1 ring-teal-500/30"
-                      : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  <p className="font-bold">Aarav Sharma</p>
-                  <p className="text-[10px] text-slate-500">Business • Thane • 6E-204</p>
-                </button>
+            {demoMode && (
+              <div className="mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  ⚡ Select Test Persona:
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
+                    className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
+                      nameInput === "Aarav Sharma"
+                        ? "border-teal-600 bg-teal-50/80 text-teal-900 font-semibold shadow-xs ring-1 ring-teal-500/30"
+                        : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <p className="font-bold">Aarav Sharma</p>
+                    <p className="text-[10px] text-slate-500">Business • Thane • 6E-204</p>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
-                  className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
-                    nameInput === "Priya Nair"
-                      ? "border-rose-600 bg-rose-50/80 text-rose-900 font-semibold shadow-xs ring-1 ring-rose-500/30"
-                      : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  <p className="font-bold flex items-center gap-1">Priya Nair 🌸</p>
-                  <p className="text-[10px] text-slate-500">Women-Only • Powai</p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
+                    className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
+                      nameInput === "Priya Nair"
+                        ? "border-rose-600 bg-rose-50/80 text-rose-900 font-semibold shadow-xs ring-1 ring-rose-500/30"
+                        : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <p className="font-bold flex items-center gap-1">Priya Nair 🌸</p>
+                    <p className="text-[10px] text-slate-500">Women-Only • Powai</p>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <div>
@@ -568,9 +576,11 @@ export default function Home() {
                   <label className="text-xs font-semibold text-slate-700">
                     6-Digit Verification OTP
                   </label>
-                  <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
-                    Dev OTP: 123456
-                  </span>
+                  {demoMode && (
+                    <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
+                      Dev OTP: 123456
+                    </span>
+                  )}
                 </div>
                 <input
                   type="text"
@@ -578,7 +588,7 @@ export default function Home() {
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full text-sm p-3.5 rounded-xl border border-slate-200 text-center tracking-widest font-mono font-bold focus:outline-none focus:border-teal-600"
-                  placeholder="123456"
+                  placeholder={demoMode ? "123456" : "Enter 6-digit OTP"}
                 />
               </div>
 

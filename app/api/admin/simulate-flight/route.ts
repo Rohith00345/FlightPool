@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { matchRiderRequests, RiderRequest } from "@/lib/matching";
 import { calculatePoolPricing } from "@/lib/pricing";
 import { requireRole } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo";
 
 export async function POST(req: NextRequest) {
   const auth = requireRole(req, ["ADMIN"]);
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
     return auth.response;
   }
 
-  if (process.env.DEMO_MODE === "false") {
+  if (!isDemoMode()) {
     return NextResponse.json(
       { error: "Forbidden", message: "Flight simulation is only permitted when DEMO_MODE=true" },
       { status: 403 }

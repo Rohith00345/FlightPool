@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { Car, MapPin, CheckCircle, Navigation, Phone, IndianRupee, RefreshCw, Lock } from "lucide-react";
+import { isClientDemoMode } from "@/lib/demo";
 
 export default function DriverViewPage() {
   const [trips, setTrips] = useState<any[]>([]);
@@ -102,7 +103,7 @@ export default function DriverViewPage() {
               <h4 className="text-sm font-bold text-slate-900">Driver Sign-In Required (RBAC)</h4>
               <p className="text-xs text-slate-500 mt-1">Access to airport queue assignments and trip manifests requires active driver authorization.</p>
             </div>
-            {process.env.NEXT_PUBLIC_DEMO_MODE !== "false" ? (
+            {isClientDemoMode() ? (
               <button
                 onClick={handleDriverLogin}
                 className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition mt-1"

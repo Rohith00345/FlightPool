@@ -392,7 +392,7 @@ model DriverIncentive {
 model OtpRequest {
   id         String    @id @default(cuid())
   phone      String
-  codeHash   String    @default("123456")
+  codeHash   String
   purpose    String    @default("login")
   attempts   Int       @default(0)
   ip         String?

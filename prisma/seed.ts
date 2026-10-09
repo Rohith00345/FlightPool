@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { isDemoMode } from "../lib/demo";
 
 const prisma = new PrismaClient();
 
@@ -136,6 +137,7 @@ const PASSENGERS_DATA = [
 
 async function main() {
   console.log("Cleaning old database records...");
+  await prisma.otpRequest.deleteMany();
   await prisma.incident.deleteMany();
   await prisma.rating.deleteMany();
   await prisma.payment.deleteMany();
@@ -261,7 +263,13 @@ async function main() {
     prisma.ledgerAccount.create({ data: { ownerType: "tax", accountType: "gst" } }),
   ]);
 
-  console.log("Creating Admin User...");
+  const isDemo = (isDemoMode() || process.argv.includes("--demo")) && !process.argv.includes("--prod");
+  if (!isDemo) {
+    console.log("Production reference data seeded successfully (Zero demo users, drivers, or pools created).");
+    return;
+  }
+
+  console.log("DEMO_MODE is true: Creating Demo Admin User, Vehicles, Drivers, and Pools...");
   const admin = await prisma.user.create({
     data: {
       name: "FlightPool Admin",

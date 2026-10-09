@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
+import { isClientDemoMode } from "@/lib/demo";
 import {
   Users,
   Car,
@@ -116,16 +117,14 @@ export default function AdminPage() {
                 <p className="text-xs text-slate-500">Only authorized dispatchers and administrators may access Mumbai Airport operations control.</p>
               </div>
             </div>
-            {process.env.NEXT_PUBLIC_DEMO_MODE !== "false" ? (
+            {isClientDemoMode() ? (
               <button
                 onClick={handleAdminLogin}
                 className="w-full sm:w-auto px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition"
               >
                 Sign In as FlightPool Admin (Demo Persona)
               </button>
-            ) : (
-              <p className="text-xs text-amber-800 font-semibold">Production Mode Active: Authenticate via Admin SSO.</p>
-            )}
+            ) : null}
           </div>
         )}
 

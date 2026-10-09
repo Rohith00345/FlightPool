@@ -13,8 +13,20 @@ export interface SessionPayload {
 }
 
 import { prisma } from "@/lib/prisma";
+import { isDemoMode } from "@/lib/demo";
 
-export async function checkOtpRateLimit(identifier: string, ip?: string): Promise<{ allowed: boolean; remaining: number }> {
+/**
+ * Generates SHA-256 hash of an OTP code for secure storage
+ */
+export function hashOtp(code: string): string {
+  return crypto.createHash("sha256").update(code).digest("hex");
+}
+
+export async function checkOtpRateLimit(
+  identifier: string,
+  ip?: string,
+  rawOtp?: string
+): Promise<{ allowed: boolean; remaining: number }> {
   try {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     const recentAttempts = await prisma.otpRequest.count({
@@ -29,10 +41,12 @@ export async function checkOtpRateLimit(identifier: string, ip?: string): Promis
       return { allowed: false, remaining: 0 };
     }
 
-    // Persist this attempt in the database
+    // Persist this attempt in the database with SHA-256 hashed code
+    const codeToHash = rawOtp || (isDemoMode() ? "123456" : crypto.randomInt(100000, 999999).toString());
     await prisma.otpRequest.create({
       data: {
         phone: identifier,
+        codeHash: hashOtp(codeToHash),
         purpose: "login",
         ip: ip || null,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
@@ -132,21 +146,6 @@ export function getSessionFromRequest(req: NextRequest | Request): SessionPayloa
     if (cookies[COOKIE_NAME]) {
       const session = verifySessionToken(cookies[COOKIE_NAME]);
       if (session) return session;
-    }
-  }
-
-  // 3. Demo Mode Header / Key (allows reviewers & automated E2E testing to simulate roles without credentials leak)
-  if (process.env.DEMO_MODE !== "false") {
-    const demoRole = req.headers.get("x-demo-role") as SessionPayload["role"] | null;
-    const demoUserId = req.headers.get("x-demo-user-id");
-    if (demoRole) {
-      return {
-        userId: demoUserId || "demo-user-id",
-        role: demoRole,
-        phone: "+919999999999",
-        name: `Demo ${demoRole}`,
-        exp: Date.now() + 60 * 60 * 1000,
-      };
     }
   }
 

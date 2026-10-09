@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkOtpRateLimit, consumeOtpInDatabase, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
     // Rate limiting: Max 5 attempts per 10 minutes (backed by PostgreSQL OtpRequest table)
-    const rateCheck = await checkOtpRateLimit(identifier, ip);
+    const rateCheck = await checkOtpRateLimit(identifier, ip, otp);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many OTP attempts. Please wait 10 minutes before trying again." },
@@ -24,21 +25,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const demo = isDemoMode();
+
     // Phase 1 / Auth: OTP request vs verification
     if (!otp) {
       // Step 1: Send OTP request
       return NextResponse.json({
         success: true,
-        message: "OTP sent to " + identifier + ". In dev mode, use OTP: 123456",
-        otpHint: "123456",
+        message: demo
+          ? "OTP sent to " + identifier + ". In dev mode, use OTP: 123456"
+          : "OTP sent to " + identifier,
+        ...(demo ? { otpHint: "123456" } : {}),
         remainingAttempts: rateCheck.remaining,
       });
     }
 
     // Step 2: Verify OTP
-    const isDemoMode = process.env.DEMO_MODE !== "false";
-    if (!isDemoMode) {
-      // In production mode, hardcoded dev OTP 123456 is rejected
+    if (!demo) {
+      // When demo mode is OFF, dev OTP 123456 is strictly rejected
       return NextResponse.json(
         { error: "Production mode active: Live SMS verification provider required." },
         { status: 403 }
