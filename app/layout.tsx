@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FlightPool • मुंबई एयरपोर्ट कैब शेयरिंग | Mumbai Airport Cab Sharing",
+  title: "FlightPool • Mumbai Airport Cab Sharing (BOM)",
   description:
-    "Share a cab from Mumbai Airport (BOM T1 & T2) to Thane, Mulund, Powai, Bandra, Andheri, Navi Mumbai. Split fare with verified flight passengers & save up to 50%.",
+    "Share an airport cab from Mumbai Airport (BOM Terminal 1 & 2) to Thane, Mulund, Powai, Bandra, Andheri, and Navi Mumbai. Split fares with verified co-passengers and save up to 50%.",
   applicationName: "FlightPool",
   appleWebApp: {
     capable: true,

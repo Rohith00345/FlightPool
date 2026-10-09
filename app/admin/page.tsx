@@ -79,7 +79,7 @@ export default function AdminPage() {
         <div className="bg-slate-900 text-white p-5 rounded-3xl flex items-center justify-between shadow-sm">
           <div>
             <h1 className="text-lg font-bold">Admin Dispatch & Control</h1>
-            <p className="text-xs text-slate-400">मुंबई हवाई अड्डा पूल नियंत्रण • Mumbai Airport Operations</p>
+            <p className="text-xs text-slate-400">Real-Time Mumbai Airport Operations & Fleet Analytics</p>
           </div>
           <button
             onClick={fetchMetrics}
@@ -156,7 +156,7 @@ export default function AdminPage() {
             <div>
               <h2 className="text-base font-bold">Simulate Flight Landing & Auto-Match</h2>
               <p className="text-xs text-slate-300">
-                उड़ान लैंडिंग सिमुलेशन • Watch real-time pooling in action
+                Live BOM Airport Flight Replay • Watch real-time pooling in action
               </p>
             </div>
           </div>

@@ -262,11 +262,11 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
   });
 
   // Test 5: UI Test on Home Page with Mobile Viewport (360px width)
-  test("5. Mobile Viewport 360px UI and English/Hindi bilingual labels", async ({ page }) => {
+  test("5. Mobile Viewport 360px UI and English interface", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await page.goto("/");
 
-    // Verify Title & bilingual header
+    // Verify Title & header
     await expect(page.locator("header")).toBeVisible();
     await expect(page.locator("header").locator("text=FlightPool")).toBeVisible();
     await expect(page.locator("header").locator("text=BOM")).toBeVisible();

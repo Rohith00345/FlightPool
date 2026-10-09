@@ -1,4 +1,4 @@
-# ✈️ FlightPool (फ़्लाइटपूल)
+# ✈️ FlightPool
 
 > **Mobile-first PWA for Mumbai Airport (BOM) passengers to share cabs and split fares to nearby destination corridors.**
 
@@ -24,7 +24,7 @@ Experience FlightPool in action on Vercel:
 
 ## 🌟 Key Features
 
-- 📱 **Mobile-First PWA UX**: Designed with 48px tap targets, one primary action per screen, works seamlessly down to 360px viewport width, and features dual **English & Hindi (हिंदी)** labels.
+- 📱 **Mobile-First PWA UX**: Designed with 48px tap targets, one primary action per screen, and works seamlessly down to 360px viewport width.
 - 🛫 **Flight & Boarding Pass Verification**: Mock scanning and verification tied to real flight arrival schedules at **Mumbai Airport (BOM Terminal 1 & 2)**.
 - 🗺️ **Interactive Leaflet Map**: Visualizes Mumbai Airport terminals and destination corridors (Thane, Mulund, Powai, Bandra, Andheri, Navi Mumbai) with route polylines and drop-off markers.
 - 🧮 **Pure Matching Engine (`/lib/matching`)**: Matches riders within a 30-minute flight window, enforces max 4 riders per cab, luggage capacity (max 4 bags), max detour cap (≤ 20 min), and women-only pools.
@@ -151,19 +151,19 @@ You can run this demo either on **[https://flight-pool-red.vercel.app](https://f
 1. **Rider Onboarding & Login**:
    - Open `/` in a mobile viewport (e.g., iPhone 14 / 375px).
    - Click the **"Aarav Sharma"** quick-persona card (or enter any mobile number with dev OTP `123456`).
-   - Click **CONTINUE • आगे बढ़ें**.
+   - Click **CONTINUE TO FLIGHT**.
 
 2. **Flight & Boarding Pass Verification**:
    - Select flight **6E-204 (DEL → BOM T2)**.
    - Click **CONFIRM FLIGHT 6E-204**.
    - Review the digital boarding pass card with PNR and seat number.
-   - Click **VERIFY & CONTINUE • सत्यापित करें**.
+   - Click **VERIFY & CONTINUE**.
 
 3. **Destination & Upfront Fare**:
    - Tap on the **Thane** zone chip (or click on the interactive Mumbai corridor map).
    - Notice the upfront fare card: **₹360 instead of ₹740 • Save ₹380 (51%)**.
    - Choose luggage count (e.g., 1 bag).
-   - Click **I'VE LANDED & READY • मैं तैयार हूँ**.
+   - Click **I'VE LANDED & READY**.
 
 4. **Pool Formation & Mock Payment**:
    - View real-time pool formation with co-riders (e.g., Vikram Mehta, Rohan Kulkarni).

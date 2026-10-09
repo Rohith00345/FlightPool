@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Share2, Copy, Check, MessageCircle, X } from "lucide-react";
+import { Share2, Copy, Check, MessageCircle, X, ShieldCheck } from "lucide-react";
 
 interface ShareTripModalProps {
   isOpen: boolean;
@@ -38,11 +38,11 @@ export default function ShareTripModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -52,12 +52,12 @@ export default function ShareTripModal({
             <Share2 className="w-5 h-5 text-teal-700" />
           </div>
           <div>
-            <h3 className="text-lg font-bold">Share Live Trip</h3>
-            <p className="text-xs text-slate-500">ट्रिप स्टेटस साझा करें</p>
+            <h3 className="text-lg font-bold text-slate-900">Share Live Trip</h3>
+            <p className="text-xs text-slate-500 font-medium">Real-Time GPS Tracking Link</p>
           </div>
         </div>
 
-        <p className="text-xs text-slate-600 mb-4">
+        <p className="text-xs text-slate-600 mb-4 leading-relaxed">
           Share this live tracking link with family or friends. They can view real-time location, vehicle license plate, and drop-off updates.
         </p>
 
@@ -66,7 +66,7 @@ export default function ShareTripModal({
             type="text"
             readOnly
             value={shareUrl}
-            className="text-xs bg-transparent text-slate-700 font-mono w-full focus:outline-none"
+            className="text-xs bg-transparent text-slate-700 font-mono w-full focus:outline-none select-all"
           />
           <button
             onClick={handleCopy}
@@ -88,9 +88,9 @@ export default function ShareTripModal({
 
           <button
             onClick={onClose}
-            className="w-full text-slate-500 hover:text-slate-800 text-xs py-2 text-center"
+            className="w-full text-slate-500 hover:text-slate-800 text-xs py-2 font-medium transition-colors"
           >
-            Close / बंद करें
+            Close
           </button>
         </div>
       </div>

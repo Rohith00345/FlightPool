@@ -25,7 +25,15 @@ export async function POST(
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
 
-    const targetId = ratedUserIdOrDriverId || trip.driverId;
+    let targetId = ratedUserIdOrDriverId;
+    if (targetId) {
+      const validTarget = await prisma.user.findUnique({ where: { id: targetId } });
+      if (!validTarget) {
+        targetId = raterUserId;
+      }
+    } else {
+      targetId = raterUserId;
+    }
 
     const rating = await prisma.rating.create({
       data: {

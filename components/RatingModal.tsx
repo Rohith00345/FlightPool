@@ -71,11 +71,11 @@ export default function RatingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -83,7 +83,7 @@ export default function RatingModal({
         {submitted ? (
           <div className="text-center py-6">
             <CheckCircle className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-slate-900">Thank You! / धन्यवाद!</h3>
+            <h3 className="text-lg font-bold text-slate-900">Thank You!</h3>
             <p className="text-xs text-slate-500 mt-1">
               Your feedback keeps Mumbai airport carpooling safe and reliable.
             </p>
@@ -142,7 +142,7 @@ export default function RatingModal({
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Add details (optional) / अतिरिक्त सुझाव..."
+              placeholder="Add feedback or suggestions (optional)..."
               rows={2}
               className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-500 mb-5 resize-none"
             />
@@ -152,7 +152,7 @@ export default function RatingModal({
               disabled={loading}
               className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md transition-all disabled:opacity-60"
             >
-              {loading ? "Submitting..." : "Submit Rating • सबमिट करें"}
+              {loading ? "Submitting..." : "Submit Rating"}
             </button>
           </div>
         )}

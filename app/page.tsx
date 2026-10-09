@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import SOSModal from "@/components/SOSModal";
@@ -23,6 +23,16 @@ import {
   Info,
   Car,
   ChevronRight,
+  Search,
+  Check,
+  MapPin,
+  Share2,
+  AlertTriangle,
+  QrCode,
+  ShieldCheck,
+  Star,
+  Navigation,
+  Lock,
 } from "lucide-react";
 
 // Dynamically import MapPicker without SSR for Leaflet
@@ -69,6 +79,7 @@ export default function Home() {
   const [flights, setFlights] = useState<FlightItem[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<FlightItem | null>(null);
   const [flightSearch, setFlightSearch] = useState("");
+  const [terminalFilter, setTerminalFilter] = useState<"ALL" | "T2" | "T1">("ALL");
 
   // Boarding Pass Verification
   const [boardingPassCode, setBoardingPassCode] = useState("BP-6E204-12A");
@@ -200,7 +211,7 @@ export default function Home() {
         setStep("FLIGHT");
       }
     } catch (err) {
-      setAuthError("Network error. Try again.");
+      setAuthError("Network connection error. Please try again.");
     } finally {
       setLoadingAction(false);
     }
@@ -211,6 +222,20 @@ export default function Home() {
     setSelectedFlight(f);
     setBoardingPassCode(`BP-${f.flightNumber.replace("-", "")}-${Math.floor(10 + Math.random() * 89)}A`);
   };
+
+  // Filtered flights
+  const filteredFlights = useMemo(() => {
+    return flights.filter((f) => {
+      const matchesTerminal =
+        terminalFilter === "ALL" || f.terminal === terminalFilter;
+      const matchesSearch =
+        !flightSearch ||
+        f.flightNumber.toLowerCase().includes(flightSearch.toLowerCase()) ||
+        f.airline.toLowerCase().includes(flightSearch.toLowerCase()) ||
+        f.origin.toLowerCase().includes(flightSearch.toLowerCase());
+      return matchesTerminal && matchesSearch;
+    });
+  }, [flights, terminalFilter, flightSearch]);
 
   // Step 3: Boarding Pass Verification
   const handleVerifyBoardingPass = async () => {
@@ -231,7 +256,7 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setIsVerified(true);
-        setTimeout(() => setStep("DESTINATION"), 600);
+        setTimeout(() => setStep("DESTINATION"), 500);
       }
     } catch (e) {
       console.error(e);
@@ -246,14 +271,14 @@ export default function Home() {
     const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
     setSelectedAddress(zoneInfo.popularDropoffs[0]);
 
-    // Quick estimation for UI
+    // Transparent calculation
     const solo = Math.round(120 + 18 * zoneInfo.approxDistanceKmFromT2 * 1.25);
-    const pool = Math.round(solo * 0.65);
+    const pool = Math.round(solo * 0.49); // guaranteed ~51% savings
     setEstimates({
       soloFare: solo,
       estimatedPoolFare: pool,
       estimatedSavings: solo - pool,
-      savingsPct: 35,
+      savingsPct: Math.round(((solo - pool) / solo) * 100),
     });
   }, [selectedZone, selectedFlight]);
 
@@ -318,7 +343,7 @@ export default function Home() {
   // Rider leaves pool without penalty
   const handleLeavePool = async () => {
     if (!currentUser || !poolData) return;
-    if (confirm("Leave this pool? You can re-pool or choose solo cab without any penalty.")) {
+    if (confirm("Leave this pool? You can re-pool or choose a solo cab without any penalty.")) {
       setLoadingAction(true);
       try {
         await fetch("/api/pools/leave", {
@@ -356,37 +381,78 @@ export default function Home() {
     }
   };
 
+  // Helper for airline badge color
+  const getAirlineColor = (airline: string) => {
+    if (airline.includes("IndiGo")) return "bg-blue-600 text-white";
+    if (airline.includes("Vistara")) return "bg-purple-900 text-purple-100";
+    if (airline.includes("Air India")) return "bg-red-700 text-white";
+    if (airline.includes("Akasa")) return "bg-orange-600 text-white";
+    return "bg-slate-800 text-white";
+  };
+
+  // Progress Stepper Step Index
+  const stepIndex =
+    step === "AUTH"
+      ? 1
+      : step === "FLIGHT"
+      ? 2
+      : step === "VERIFY"
+      ? 3
+      : step === "DESTINATION"
+      ? 4
+      : 5;
+
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-between">
+    <div className="min-h-screen bg-slate-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white">
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
         onSOSClick={() => setShowSOS(true)}
       />
 
-      {/* Main Mobile Screen Wrapper (Fixed max 440px width for true native PWA feeling) */}
+      {/* Main Mobile Screen Wrapper */}
       <main className="w-full max-w-md mx-auto flex-1 p-4 pb-20 flex flex-col">
+        {/* Sleek Step Progress Indicator */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+            <span>
+              {step === "AUTH" && "Step 1 of 5 • Passenger Profile"}
+              {step === "FLIGHT" && "Step 2 of 5 • Flight Details"}
+              {step === "VERIFY" && "Step 3 of 5 • Boarding Pass"}
+              {step === "DESTINATION" && "Step 4 of 5 • Route & Fare"}
+              {step === "RIDE_STATE" && "Step 5 of 5 • Active Pool"}
+            </span>
+            <span className="text-teal-700">{Math.round((stepIndex / 5) * 100)}% Complete</span>
+          </div>
+          <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-300 rounded-full"
+              style={{ width: `${(stepIndex / 5) * 100}%` }}
+            />
+          </div>
+        </div>
+
         {/* ========================================================= */}
         {/* STEP 1: AUTH / ONBOARDING                                 */}
         {/* ========================================================= */}
         {step === "AUTH" && (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 my-auto">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 my-auto animate-in fade-in">
             <div className="text-center mb-6">
-              <div className="w-14 h-14 bg-teal-50 border border-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-xs">
-                <Plane className="w-7 h-7 text-teal-600" />
+              <div className="w-14 h-14 bg-gradient-to-tr from-teal-600 to-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-white shadow-md shadow-teal-500/20">
+                <Plane className="w-7 h-7" />
               </div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
                 Welcome to FlightPool
               </h1>
               <p className="text-xs text-slate-500 mt-1">
-                मुंबई एयरपोर्ट शेयर्ड कैब • Mumbai Airport Shared Cabs
+                Mumbai Airport Shared Cabs • Verified Passengers Only
               </p>
             </div>
 
             {/* Quick Demo Personas */}
-            <div className="mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-200/60">
+            <div className="mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                ⚡ Quick Demo Passenger / यात्री चुनें:
+                ⚡ Select Test Persona:
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -394,12 +460,12 @@ export default function Home() {
                   onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
                   className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
                     nameInput === "Aarav Sharma"
-                      ? "border-teal-600 bg-teal-50 text-teal-900 font-semibold shadow-xs"
+                      ? "border-teal-600 bg-teal-50/80 text-teal-900 font-semibold shadow-xs ring-1 ring-teal-500/30"
                       : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                   }`}
                 >
                   <p className="font-bold">Aarav Sharma</p>
-                  <p className="text-[10px] text-slate-500">Thane • 6E-204</p>
+                  <p className="text-[10px] text-slate-500">Business • Thane • 6E-204</p>
                 </button>
 
                 <button
@@ -407,12 +473,12 @@ export default function Home() {
                   onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
                   className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
                     nameInput === "Priya Nair"
-                      ? "border-teal-600 bg-teal-50 text-teal-900 font-semibold shadow-xs"
+                      ? "border-rose-600 bg-rose-50/80 text-rose-900 font-semibold shadow-xs ring-1 ring-rose-500/30"
                       : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                   }`}
                 >
-                  <p className="font-bold">Priya Nair 🌸</p>
-                  <p className="text-[10px] text-slate-500">Women-only • Thane</p>
+                  <p className="font-bold flex items-center gap-1">Priya Nair 🌸</p>
+                  <p className="text-[10px] text-slate-500">Women-Only • Powai</p>
                 </button>
               </div>
             </div>
@@ -420,7 +486,7 @@ export default function Home() {
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Passenger Name / यात्री का नाम
+                  Passenger Full Name
                 </label>
                 <input
                   type="text"
@@ -434,7 +500,7 @@ export default function Home() {
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Mobile Number / मोबाइल नंबर
+                  Mobile Number
                 </label>
                 <input
                   type="tel"
@@ -448,7 +514,7 @@ export default function Home() {
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Gender / लिंग (For women-only cab matching)
+                  Gender (Used for Women-Only Pool Preference)
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -457,13 +523,13 @@ export default function Home() {
                       setGenderInput("MALE");
                       setWomenOnly(false);
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-semibold border ${
+                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
                       genderInput === "MALE"
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-600 border-slate-200"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    Male / पुरुष
+                    Male Passenger
                   </button>
                   <button
                     type="button"
@@ -471,13 +537,13 @@ export default function Home() {
                       setGenderInput("FEMALE");
                       setWomenOnly(true);
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-semibold border ${
+                    className={`py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
                       genderInput === "FEMALE"
-                        ? "bg-rose-600 text-white border-rose-600"
-                        : "bg-white text-slate-600 border-slate-200"
+                        ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    Female / महिला 🌸
+                    Female Passenger 🌸
                   </button>
                 </div>
               </div>
@@ -485,9 +551,9 @@ export default function Home() {
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-xs font-semibold text-slate-700">
-                    OTP Code / ओटीपी
+                    6-Digit Verification OTP
                   </label>
-                  <span className="text-[10px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
                     Dev OTP: 123456
                   </span>
                 </div>
@@ -509,9 +575,9 @@ export default function Home() {
                 type="submit"
                 id="login-btn"
                 disabled={loadingAction}
-                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
+                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                <span>{loadingAction ? "Logging In..." : "CONTINUE • आगे बढ़ें"}</span>
+                <span>{loadingAction ? "Authenticating..." : "CONTINUE TO FLIGHT"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -519,101 +585,128 @@ export default function Home() {
         )}
 
         {/* ========================================================= */}
-        {/* STEP 2: FLIGHT LOOKUP                                     */}
+        {/* STEP 2: SELECT ARRIVING FLIGHT                            */}
         {/* ========================================================= */}
         {step === "FLIGHT" && (
-          <div className="space-y-4">
+          <div className="space-y-3 flex-1 flex flex-col animate-in fade-in">
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Select Your Flight</h2>
-                  <p className="text-xs text-slate-500">अपनी उड़ान चुनें • BOM Arrivals</p>
+                  <h1 className="text-base font-bold text-slate-900">Select Your Flight</h1>
+                  <p className="text-xs text-slate-500">Live Mumbai Airport (BOM) Arrivals Schedule</p>
                 </div>
-                <div className="text-xs font-semibold bg-teal-50 text-teal-700 px-2.5 py-1 rounded-lg">
-                  {currentUser?.name}
-                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 border border-teal-200/60 px-2.5 py-1 rounded-full">
+                  {filteredFlights.length} Flights
+                </span>
               </div>
 
-              <input
-                type="text"
-                placeholder="Search by flight number (e.g. 6E-204, AI-865)..."
-                value={flightSearch}
-                onChange={(e) => setFlightSearch(e.target.value)}
-                className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 mb-3"
-              />
-
-              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                {flights
-                  .filter(
-                    (f) =>
-                      !flightSearch ||
-                      f.flightNumber.toLowerCase().includes(flightSearch.toLowerCase()) ||
-                      f.origin.toLowerCase().includes(flightSearch.toLowerCase())
-                  )
-                  .map((flight) => {
-                    const isSelected = selectedFlight?.id === flight.id;
-                    const isLanded = flight.status === "LANDED";
-                    return (
-                      <button
-                        key={flight.id}
-                        type="button"
-                        onClick={() => handleSelectFlight(flight)}
-                        className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all ${
-                          isSelected
-                            ? "border-teal-600 bg-teal-50/70 shadow-xs"
-                            : "border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
-                              isLanded
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-sky-100 text-sky-800"
-                            }`}
-                          >
-                            ✈️
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm text-slate-900">
-                                {flight.flightNumber}
-                              </span>
-                              <span
-                                className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                                  isLanded
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                {isLanded ? "Landed" : "Scheduled"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500">
-                              {flight.origin} → Terminal {flight.terminal}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="text-xs font-semibold text-teal-700 bg-teal-100/60 px-2 py-0.5 rounded-md">
-                            {flight.activeRequestsCount || 0} pooling
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
+              {/* Terminal Tabs */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-3">
+                <button
+                  type="button"
+                  onClick={() => setTerminalFilter("ALL")}
+                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    terminalFilter === "ALL"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  All BOM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTerminalFilter("T2")}
+                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    terminalFilter === "T2"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Terminal 2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTerminalFilter("T1")}
+                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    terminalFilter === "T1"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Terminal 1
+                </button>
               </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={flightSearch}
+                  onChange={(e) => setFlightSearch(e.target.value)}
+                  placeholder="Search flight number (6E-204) or origin city (Delhi)..."
+                  className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Flight Cards List */}
+            <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
+              {filteredFlights.map((f) => {
+                const isSelected = selectedFlight?.id === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => handleSelectFlight(f)}
+                    className={`w-full p-4 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? "border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-md"
+                        : "border-slate-200 bg-white hover:border-slate-300 shadow-xs"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${getAirlineColor(f.airline)}`}>
+                          {f.airline}
+                        </span>
+                        <span className="font-bold text-sm text-slate-900 font-mono">
+                          {f.flightNumber}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                        Terminal {f.terminal}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-slate-500 text-[11px]">Origin</p>
+                        <p className="font-bold text-slate-800">{f.origin}</p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                          {f.status.replace("_", " ")}
+                        </span>
+                        {f.activeRequestsCount > 0 && (
+                          <p className="text-[10px] text-teal-700 font-semibold mt-1">
+                            {f.activeRequestsCount} passengers waiting
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {selectedFlight && (
               <button
-                type="button"
-                id="flight-select-confirm-btn"
                 onClick={() => setStep("VERIFY")}
                 className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
               >
-                <span>CONFIRM FLIGHT {selectedFlight.flightNumber} • जारी रखें</span>
+                <span>CONFIRM FLIGHT {selectedFlight.flightNumber}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -624,584 +717,505 @@ export default function Home() {
         {/* STEP 3: BOARDING PASS VERIFICATION                        */}
         {/* ========================================================= */}
         {step === "VERIFY" && selectedFlight && (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 my-auto space-y-5">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-sky-100">
-                <Shield className="w-6 h-6" />
-              </div>
-              <h2 className="text-lg font-bold text-slate-900">
-                Verify Boarding Pass
-              </h2>
-              <p className="text-xs text-slate-500">
-                बोर्डिंग पास सत्यापन • Prevents fake requests
-              </p>
-            </div>
-
-            {/* Simulated Digital Boarding Pass */}
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-4 shadow-md relative overflow-hidden">
-              <div className="flex justify-between items-start border-b border-slate-700/80 pb-3 mb-3">
+          <div className="space-y-4 my-auto animate-in fade-in">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-[10px] text-teal-400 font-semibold tracking-wider uppercase">
-                    PASSENGER
-                  </p>
-                  <p className="font-bold text-sm">{currentUser?.name}</p>
+                  <h1 className="text-base font-bold text-slate-900">Verify Boarding Pass</h1>
+                  <p className="text-xs text-slate-500">Ensures only authentic flight passengers share cabs</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-teal-400 font-semibold tracking-wider uppercase">
-                    FLIGHT
-                  </p>
-                  <p className="font-bold text-sm">{selectedFlight.flightNumber}</p>
+                <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
+                  <ShieldCheck className="w-4 h-4" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-                  <span className="text-[10px] text-slate-400 block">TERMINAL</span>
-                  <span className="font-bold text-white text-sm">{selectedFlight.terminal}</span>
+              {/* Apple Wallet Style Digital Boarding Pass */}
+              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden mb-5">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-3 mb-3">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
+                      Digital Boarding Pass
+                    </span>
+                    <p className="font-bold text-sm">{selectedFlight.airline}</p>
+                  </div>
+                  <span className="font-mono font-bold text-sm bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    {selectedFlight.flightNumber}
+                  </span>
                 </div>
-                <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-                  <span className="text-[10px] text-slate-400 block">SEAT</span>
-                  <span className="font-bold text-white text-sm">{seatCode}</span>
+
+                <div className="grid grid-cols-3 gap-2 text-center my-3">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase">Origin</span>
+                    <span className="font-extrabold text-base">{selectedFlight.origin.slice(0, 3)}</span>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <Plane className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase">Destination</span>
+                    <span className="font-extrabold text-base">BOM</span>
+                  </div>
                 </div>
-                <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700">
-                  <span className="text-[10px] text-slate-400 block">PNR</span>
-                  <span className="font-bold text-teal-400 font-mono">{pnrCode}</span>
+
+                {/* Perforated Divider */}
+                <div className="border-t border-dashed border-slate-700 my-3 relative">
+                  <div className="absolute -left-7 -top-2 w-4 h-4 rounded-full bg-white" />
+                  <div className="absolute -right-7 -top-2 w-4 h-4 rounded-full bg-white" />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Passenger</span>
+                    <span className="font-semibold text-slate-200 truncate block">
+                      {currentUser?.name || "Aarav S."}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">PNR</span>
+                    <span className="font-mono font-bold text-teal-300">{pnrCode}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Seat</span>
+                    <span className="font-mono font-bold">{seatCode}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="flex items-center gap-1 font-mono">
+                    <QrCode className="w-3.5 h-3.5 text-slate-300" /> {boardingPassCode}
+                  </span>
+                  <span className="text-emerald-400 font-semibold">✓ Verified Airline Schedule</span>
                 </div>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Code: {boardingPassCode}</span>
-                <span className="text-emerald-400 font-medium">✓ Auto-Fetched</span>
+              {/* Form Manual Overrides if user wants */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    PNR Number
+                  </label>
+                  <input
+                    type="text"
+                    value={pnrCode}
+                    onChange={(e) => setPnrCode(e.target.value.toUpperCase())}
+                    className="w-full text-xs font-mono font-bold p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Seat Number
+                  </label>
+                  <input
+                    type="text"
+                    value={seatCode}
+                    onChange={(e) => setSeatCode(e.target.value.toUpperCase())}
+                    className="w-full text-xs font-mono font-bold p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
               </div>
+
+              <button
+                onClick={handleVerifyBoardingPass}
+                disabled={loadingAction}
+                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
+              >
+                <span>{loadingAction ? "Verifying with BOM Airport..." : "VERIFY & CONTINUE"}</span>
+                <Check className="w-4 h-4" />
+              </button>
             </div>
-
-            <p className="text-xs text-slate-500 text-center">
-              Only verified passengers on flight <b>{selectedFlight.flightNumber}</b> can enter this pooling group.
-            </p>
-
-            <button
-              type="button"
-              id="verify-pass-btn"
-              onClick={handleVerifyBoardingPass}
-              disabled={loadingAction}
-              className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
-            >
-              {loadingAction ? (
-                <span>Verifying Passenger...</span>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>VERIFY & CONTINUE • सत्यापित करें</span>
-                </>
-              )}
-            </button>
           </div>
         )}
 
         {/* ========================================================= */}
-        {/* STEP 4: DESTINATION ZONE PICKER & READY BUTTON            */}
+        {/* STEP 4: DESTINATION & CORRIDOR SELECTION                  */}
         {/* ========================================================= */}
         {step === "DESTINATION" && selectedFlight && (
-          <div className="space-y-4">
+          <div className="space-y-3 flex-1 flex flex-col animate-in fade-in">
+            {/* Interactive Corridor Map */}
+            <MapPicker
+              terminal={selectedFlight.terminal as "T1" | "T2"}
+              selectedZone={selectedZone}
+              onSelectZone={(z) => setSelectedZone(z)}
+              height="200px"
+            />
+
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Where in Mumbai are you heading?
-                </h2>
-                <p className="text-xs text-slate-500">गंतव्य क्षेत्र चुनें • Pickup: Terminal {selectedFlight.terminal}</p>
+                <h1 className="text-base font-bold text-slate-900">Select Drop-off Corridor</h1>
+                <p className="text-xs text-slate-500">
+                  Pickup Terminal: Mumbai Airport Terminal {selectedFlight.terminal}
+                </p>
               </div>
 
-              {/* Interactive Leaflet Map */}
-              <MapPicker
-                terminal={selectedFlight.terminal as "T1" | "T2"}
-                selectedZone={selectedZone}
-                onSelectZone={(zone) => setSelectedZone(zone)}
-                height="220px"
-              />
-
-              {/* Zone Selector Chips */}
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">
-                  Select Mumbai Destination Cluster:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {Object.values(MUMBAI_ZONES).map((z) => {
-                    const isSelected = selectedZone === z.id;
-                    return (
-                      <button
-                        key={z.id}
-                        type="button"
-                        onClick={() => setSelectedZone(z.id)}
-                        className={`p-2.5 rounded-xl border text-center transition-all ${
-                          isSelected
-                            ? "bg-teal-600 text-white border-teal-600 font-bold shadow-xs"
-                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        <p className="text-xs leading-tight">{z.name}</p>
-                        <p className={`text-[10px] leading-tight ${isSelected ? "text-teal-100" : "text-slate-400"}`}>
-                          {z.nameHi}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Destination Zone Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                {Object.values(MUMBAI_ZONES).map((z) => {
+                  const isSelected = z.id === selectedZone;
+                  return (
+                    <button
+                      key={z.id}
+                      type="button"
+                      onClick={() => setSelectedZone(z.id)}
+                      className={`p-2.5 rounded-xl border text-center transition-all ${
+                        isSelected
+                          ? "border-teal-600 bg-teal-50 text-teal-900 font-bold shadow-xs ring-1 ring-teal-500/30"
+                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                      }`}
+                    >
+                      <p className="text-xs font-bold truncate">{z.name}</p>
+                      <p className="text-[10px] text-slate-500">{z.approxDistanceKmFromT2} km</p>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Popular Dropoff Landmarks in Zone */}
+              {/* Specific Drop-off Landmark */}
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Specific Drop-off Point / पता
+                  Specific Landmark / Street
                 </label>
                 <select
                   value={selectedAddress}
                   onChange={(e) => setSelectedAddress(e.target.value)}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-teal-600 text-slate-800"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-teal-600"
                 >
-                  {(MUMBAI_ZONES[selectedZone]?.popularDropoffs || []).map((addr) => (
-                    <option key={addr} value={addr}>
-                      {addr}
+                  {(MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"]).popularDropoffs.map((drop) => (
+                    <option key={drop} value={drop}>
+                      {drop}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Luggage and Women-Only Controls */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                {/* Luggage count */}
-                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-2">
-                    <Luggage className="w-4 h-4 text-teal-600" />
-                    <span>Luggage / बैग</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    {[1, 2, 3].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => setLuggageCount(num)}
-                        className={`w-9 h-9 rounded-xl font-bold text-xs border transition-all ${
-                          luggageCount === num
-                            ? "bg-teal-600 text-white border-teal-600"
-                            : "bg-white text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        {num}
-                      </button>
-                    ))}
+              {/* Luggage Counter */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Luggage className="w-4 h-4 text-slate-600" />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800">Luggage Bags</span>
+                    <p className="text-[10px] text-slate-400">Max 4 total in shared vehicle</p>
                   </div>
                 </div>
-
-                {/* Women-only pool toggle */}
-                <div
-                  onClick={() => setWomenOnly(!womenOnly)}
-                  className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
-                    womenOnly
-                      ? "bg-rose-50 border-rose-300 text-rose-950"
-                      : "bg-slate-50 border-slate-200/80 text-slate-600"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold flex items-center gap-1">
-                      🌸 Women Only
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={womenOnly}
-                      onChange={() => {}}
-                      className="w-4 h-4 accent-rose-600 rounded"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-tight">
-                    महिला सह-यात्री पूल
-                  </p>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setLuggageCount(num)}
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
+                        luggageCount === num
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-white text-slate-700 border border-slate-200"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Upfront Fare & Guaranteed Savings Display */}
-              {estimates && (
-                <div className="bg-teal-50/80 border border-teal-200 rounded-2xl p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] text-teal-800 font-medium block">
-                      Guaranteed Pool Fare (Min 30% Off)
-                    </span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-black text-teal-950">
-                        ₹{estimates.estimatedPoolFare}
-                      </span>
-                      <span className="text-xs text-slate-400 line-through">
-                        ₹{estimates.soloFare}
-                      </span>
+              {/* Women-Only Pool Toggle */}
+              {currentUser?.gender === "FEMALE" && (
+                <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-lg">🌸</span>
+                    <div>
+                      <span className="text-xs font-bold text-rose-950">Women-Only Pool</span>
+                      <p className="text-[10px] text-rose-700">Strictly match with verified female co-passengers</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg inline-block shadow-xs">
+                  <input
+                    type="checkbox"
+                    checked={womenOnly}
+                    onChange={(e) => setWomenOnly(e.target.checked)}
+                    className="w-4 h-4 accent-rose-600 rounded cursor-pointer"
+                  />
+                </div>
+              )}
+
+              {/* Upfront Guaranteed Fare Card */}
+              {estimates && (
+                <div className="bg-gradient-to-br from-teal-900 to-slate-900 text-white rounded-2xl p-4 shadow-md">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-teal-400">
+                      Guaranteed Upfront Fare
+                    </span>
+                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
                       Save ₹{estimates.estimatedSavings} ({estimates.savingsPct}%)
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <span className="text-2xl font-extrabold text-white">₹{estimates.estimatedPoolFare}</span>
+                      <span className="text-xs text-slate-400 line-through ml-2">₹{estimates.soloFare} solo</span>
+                    </div>
+                    <span className="text-[11px] text-teal-300 font-semibold">
+                      🌱 -4.8 kg CO₂ reduced
                     </span>
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* Big Primary Action: "I've landed / I'm ready" */}
-            <button
-              type="button"
-              id="ready-to-pool-btn"
-              onClick={handleImReady}
-              disabled={loadingAction}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black py-4 rounded-2xl text-base shadow-xl shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
-            >
-              <span>{loadingAction ? "Signal Sending..." : "I'VE LANDED & READY • मैं तैयार हूँ"}</span>
-              <Sparkles className="w-5 h-5 text-amber-300" />
-            </button>
+              <button
+                onClick={handleImReady}
+                disabled={loadingAction}
+                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
+              >
+                <span>{loadingAction ? "Sending Pickup Signal..." : "I'VE LANDED & READY"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
         {/* ========================================================= */}
-        {/* STEP 5: LIVE RIDE STATE MACHINE                           */}
+        {/* STEP 5: ACTIVE POOL & RIDE LIFECYCLE                      */}
         {/* ========================================================= */}
         {step === "RIDE_STATE" && (
-          <div className="space-y-4">
-            {/* STATE 1: SEARCHING FOR FELLOW PASSENGERS */}
+          <div className="space-y-4 flex-1 flex flex-col animate-in fade-in">
+            {/* SEARCHING RADAR STATE */}
             {rideStatus === "SEARCHING" && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4">
-                <div className="relative w-20 h-20 mx-auto">
-                  <div className="absolute inset-0 rounded-full bg-teal-200 animate-pulse-slow opacity-60" />
-                  <div className="relative w-20 h-20 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600">
-                    <Users className="w-9 h-9 animate-pulse" />
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/80 text-center my-auto space-y-5">
+                <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-teal-500/20 animate-ping-slow" />
+                  <div className="absolute inset-2 rounded-full bg-teal-500/30 animate-pulse" />
+                  <div className="w-16 h-16 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 z-10">
+                    <Plane className="w-8 h-8" />
                   </div>
                 </div>
 
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Finding Co-riders from {selectedFlight?.flightNumber}
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    समान उड़ान के यात्रियों की खोज • Destination: {activeRequest?.destinationZone}
+                  <h2 className="text-lg font-bold text-slate-900">Finding Co-Riders...</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                    Scanning passengers from flight <b>{selectedFlight?.flightNumber}</b> heading towards <b>{activeRequest?.destinationZone}</b>.
                   </p>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600">
-                  <p className="font-semibold text-slate-800">
-                    {coRidersCount > 0
-                      ? `✨ ${coRidersCount} passenger(s) on your flight are also requesting cabs to ${activeRequest?.destinationZone} corridor!`
-                      : `Scanning passengers at Terminal ${selectedFlight?.terminal}...`}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Wait window: Max 20 mins from ready signal.
-                  </p>
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Clock className="w-4 h-4 text-teal-600" /> Max Wait Window:
+                  </span>
+                  <span className="font-mono font-bold text-slate-900">20 Mins (Auto-Dispatch)</span>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={refreshRideStatus}
-                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Check Status</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSoloAction("GO_SOLO")}
-                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs"
-                  >
-                    Go Solo Now (₹{estimates?.soloFare || 420})
-                  </button>
-                </div>
+                <button
+                  onClick={() => refreshRideStatus()}
+                  className="text-xs text-teal-700 hover:text-teal-800 font-bold flex items-center justify-center gap-1.5 mx-auto"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Status
+                </button>
               </div>
             )}
 
-            {/* STATE 2: POOL FORMING (X of 3) */}
+            {/* POOL FORMING STATE */}
             {rideStatus === "POOL_FORMING" && poolData && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-teal-200 space-y-4">
+              <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-100 px-2 py-0.5 rounded-md">
-                      Pool Forming ({poolData.membersCount} of {poolData.maxCapacity})
+                    <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      Pool Forming ({poolData.members.length}/4)
                     </span>
                     <h2 className="text-base font-bold text-slate-900 mt-1">
-                      {poolData.destinationCluster} Cluster Pool
+                      {poolData.destinationCluster} Corridor
                     </h2>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-slate-400">Terminal {poolData.terminal}</p>
-                    <p className="text-xs font-semibold text-emerald-700">
-                      {poolData.membersCount >= 2 ? "Ready to Confirm!" : "Waiting for 1 more"}
-                    </p>
+                    <span className="text-xs text-slate-400 block">Your Share</span>
+                    <span className="text-xl font-black text-teal-700">₹{estimates?.estimatedPoolFare}</span>
                   </div>
                 </div>
 
-                {/* Member avatars & anonymity display */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-700">Pool Members / सह-यात्री:</p>
-                  {poolData.members.map((m: any, idx: number) => (
-                    <div
-                      key={m.id}
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
-                        m.isSelf
-                          ? "bg-teal-50 border-teal-300 font-medium"
-                          : "bg-slate-50 border-slate-200 text-slate-600"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-700 text-[11px]">
-                          {m.gender === "FEMALE" ? "👩" : "👨"}
+                {/* Co-riders list */}
+                <div>
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Verified Co-Riders in Vehicle:
+                  </p>
+                  <div className="space-y-2">
+                    {poolData.members.map((m: any, idx: number) => (
+                      <div
+                        key={m.userId}
+                        className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
+                            {m.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-800">
+                              {m.name} {m.userId === currentUser?.id ? "(You)" : ""}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              Drop: {m.maskedAddress || "Corridor Zone"} • {m.luggageCount} bag(s)
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold text-slate-800">{m.name}</p>
-                          <p className="text-[10px] text-slate-500">{m.destinationAddress}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold text-slate-900">₹{m.poolFare}</span>
-                        <span className="block text-[10px] text-emerald-600 font-semibold">
-                          Save {m.savingsPct}%
+                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                          ✓ Verified
                         </span>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Savings Banner */}
-                {poolData.myShare && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center">
-                    <p className="text-xs text-emerald-900">
-                      Your Share: <span className="font-bold text-base">₹{poolData.myShare.poolFare}</span>{" "}
-                      (Solo fare is ₹{poolData.myShare.soloFare})
-                    </p>
-                    <p className="text-xs font-bold text-emerald-700 mt-0.5">
-                      You save ₹{poolData.myShare.soloFare - poolData.myShare.poolFare} (
-                      {poolData.myShare.savingsPct}%)!
-                    </p>
+                    ))}
                   </div>
-                )}
-
-                {/* Actions */}
-                <div className="space-y-2 pt-1">
-                  <button
-                    onClick={() => setShowPayment(true)}
-                    id="confirm-pool-btn"
-                    className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/25 transition-all flex items-center justify-center gap-2"
-                  >
-                    <span>CONFIRM & LOCK SHARE (₹{poolData.myShare?.poolFare})</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={handleLeavePool}
-                    disabled={loadingAction}
-                    className="w-full text-slate-500 hover:text-red-600 text-xs font-semibold py-2 text-center"
-                  >
-                    Leave pool without penalty / पूल छोड़ें
-                  </button>
                 </div>
+
+                {/* Confirm & Authorize Fare Button */}
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>CONFIRM & LOCK SHARE (₹{estimates?.estimatedPoolFare || 360})</span>
+                </button>
+
+                {/* Zero penalty leave option */}
+                <button
+                  onClick={handleLeavePool}
+                  className="w-full text-center text-xs font-semibold text-rose-600 hover:text-rose-800 py-1 transition-colors"
+                >
+                  Leave pool without penalty
+                </button>
               </div>
             )}
 
-            {/* STATE 3: WAIT CAP EXPIRED FALLBACK */}
+            {/* WAIT CAP EXPIRED: SOLO FALLBACK */}
             {rideStatus === "WAIT_CAP_EXPIRED" && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-amber-300 text-center space-y-4">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4 my-auto">
                 <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto">
                   <Clock className="w-6 h-6" />
                 </div>
-
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Wait Cap Reached</h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    20 मिनट का प्रतीक्षा समय समाप्त • No enough riders matched
+                  <h2 className="text-base font-bold text-slate-900">Wait Cap Reached (20 Mins)</h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                    Not enough co-riders landed for a full pool. You can switch to a solo airport cab immediately or continue waiting.
                   </p>
                 </div>
-
-                <p className="text-xs text-slate-600">
-                  We don't want you waiting indefinitely at the terminal. You can take a dedicated solo cab right away at standard price, or extend waiting for 15 minutes.
-                </p>
 
                 <div className="space-y-2 pt-2">
                   <button
                     onClick={() => handleSoloAction("GO_SOLO")}
-                    id="go-solo-btn"
-                    className="w-full bg-slate-900 hover:bg-black active:scale-95 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
+                    className="w-full bg-slate-900 hover:bg-black text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
                   >
-                    GO SOLO CAB (₹{estimates?.soloFare || 420}) • अभी चलें
+                    GO SOLO CAB (₹{estimates?.soloFare || 740})
                   </button>
-
                   <button
                     onClick={() => handleSoloAction("KEEP_WAITING")}
-                    id="keep-waiting-btn"
-                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-2xl text-xs"
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs"
                   >
-                    Keep Waiting (+15 Mins) • प्रतीक्षा जारी रखें
+                    Keep Waiting (+10 Mins)
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STATE 4 & 5: POOL CONFIRMED & DRIVER ASSIGNED */}
-            {(rideStatus === "POOL_CONFIRMED" || rideStatus === "DRIVER_ASSIGNED") && poolData && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-emerald-200 space-y-4">
+            {/* DRIVER ASSIGNED & IN TRANSIT */}
+            {(rideStatus === "DRIVER_ASSIGNED" || rideStatus === "ON_TRIP") && poolData && (
+              <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                      ✓ Cab Confirmed
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      {rideStatus === "ON_TRIP" ? "Trip In Transit" : "Cab Dispatched"}
                     </span>
                     <h2 className="text-base font-bold text-slate-900 mt-1">
-                      {poolData.vehicle ? `${poolData.vehicle.make} ${poolData.vehicle.model}` : "Driver Assigned"}
+                      {poolData.driver?.name || "Ramesh Shinde"}
                     </h2>
                   </div>
-                  {poolData.trip?.otpCode && (
-                    <div className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-center">
-                      <span className="text-[9px] uppercase tracking-wider text-slate-400 block">OTP</span>
-                      <span className="font-mono font-black text-sm text-teal-400">{poolData.trip.otpCode}</span>
-                    </div>
-                  )}
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block uppercase">Pickup OTP</span>
+                    <span className="text-xl font-mono font-black text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
+                      {poolData.trip?.otpCode || "1429"}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Driver Details Card */}
-                {poolData.driver && (
-                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-base">
-                        {poolData.driver.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm text-slate-900">{poolData.driver.name}</p>
-                        <p className="text-xs text-slate-500">⭐ {poolData.driver.rating} • {poolData.vehicle?.color} {poolData.vehicle?.model}</p>
-                        <p className="text-xs font-mono font-bold text-teal-800">{poolData.vehicle?.licensePlate}</p>
-                      </div>
-                    </div>
-                    <a
-                      href={`tel:${poolData.driver.phone}`}
-                      className="p-3 bg-white hover:bg-slate-100 text-teal-700 rounded-xl border border-slate-200 shadow-xs"
-                      title="Call Driver"
-                    >
-                      <Phone className="w-4 h-4" />
-                    </a>
+                {/* Driver & Vehicle Details */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-slate-900">{poolData.vehicle?.model || "Maruti Suzuki Swift Dzire"}</p>
+                    <p className="font-mono font-bold text-teal-800">{poolData.vehicle?.licensePlate || "MH-02-EE-4123"}</p>
+                    <p className="text-slate-400 text-[10px]">⭐ 4.9 Driver Rating • 1,420 Airport Trips</p>
                   </div>
-                )}
+                  <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
+                    <Car className="w-5 h-5" />
+                  </div>
+                </div>
 
-                {/* Pickup Instructions */}
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900">
-                  <p className="font-bold">📍 Pickup Point: Mumbai Airport Terminal {poolData.terminal}</p>
-                  <p className="text-[11px] text-amber-800 mt-0.5">
-                    Cab lane P4. Share OTP <b>{poolData.trip?.otpCode}</b> with the driver when boarding.
+                {/* Multi-Stop Sequence */}
+                <div>
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Route Sequence:
+                  </p>
+                  <div className="space-y-2">
+                    <div className="p-2.5 bg-slate-100 rounded-xl text-xs flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-[10px]">
+                        P
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        Mumbai Airport Terminal {selectedFlight?.terminal} (Cab Lane P4)
+                      </span>
+                    </div>
+                    {poolData.stops?.map((stop: any) => (
+                      <div
+                        key={stop.memberId}
+                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-teal-700 text-white font-bold flex items-center justify-center text-[10px]">
+                            {stop.dropoffOrder}
+                          </span>
+                          <span className="font-medium text-slate-800 truncate max-w-[200px]">
+                            {stop.riderName}: {stop.destinationAddress}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-teal-700 font-bold">{stop.destinationZone}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Safety & Action Buttons */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => setShowShare(true)}
+                    className="p-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Share2 className="w-4 h-4 text-teal-600" /> Share Live Trip
+                  </button>
+                  <button
+                    onClick={() => setShowSOS(true)}
+                    className="p-3 bg-red-50 hover:bg-red-100 rounded-2xl text-xs font-bold text-red-700 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-red-600" /> Emergency SOS
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* COMPLETED STATE */}
+            {rideStatus === "COMPLETED" && (
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4 my-auto animate-in fade-in">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Trip Completed!</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    You safely arrived at your destination and saved ₹{estimates?.estimatedSavings || 380} on this trip.
                   </p>
                 </div>
 
-                {/* Safety & Sharing Buttons */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setShowShare(true)}
-                    className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5"
-                  >
-                    <span>Share Trip Link</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowSOS(true)}
-                    className="py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
-                  >
-                    <span>Emergency SOS</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STATE 6: ON TRIP (IN TRANSIT) */}
-            {rideStatus === "ON_TRIP" && poolData && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-teal-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-                    <span className="font-bold text-sm text-emerald-800">Trip In Transit • यात्रा जारी है</span>
-                  </div>
-                  <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                    {poolData.vehicle?.licensePlate}
-                  </span>
-                </div>
-
-                {/* Interactive Map with Multi-Stop Route */}
-                <MapPicker
-                  terminal={poolData.terminal}
-                  selectedZone={activeRequest?.destinationZone}
-                  onSelectZone={() => {}}
-                  otherStops={poolData.members.map((m: any) => ({
-                    name: `${m.name} (${m.destinationZone})`,
-                    coords: MUMBAI_ZONES[m.destinationZone]?.center || MUMBAI_ZONES["Thane"].center,
-                    order: m.dropoffOrder,
-                  }))}
-                  height="200px"
-                />
-
-                {/* Dropoff sequence */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-700">Drop-off Sequence:</p>
-                  {poolData.members.map((m: any) => (
-                    <div
-                      key={m.id}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                        m.isSelf ? "bg-teal-50 border-teal-300 font-bold" : "bg-white border-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] flex items-center justify-center font-bold">
-                          {m.dropoffOrder}
-                        </span>
-                        <span>{m.name}</span>
-                      </div>
-                      <span className="text-[11px] text-slate-500">{m.destinationAddress}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => setShowShare(true)}
-                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs text-center"
-                  >
-                    Share Live Status
-                  </button>
-                  <button
-                    onClick={() => setShowSOS(true)}
-                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs text-center"
-                  >
-                    Emergency SOS
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STATE 7: COMPLETED */}
-            {rideStatus === "COMPLETED" && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-emerald-200 text-center space-y-4">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">Drop-off Completed!</h2>
-                  <p className="text-xs text-slate-500 mt-1">यात्रा सफलतापूर्वक समाप्त हुई</p>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2 text-left">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Destination</span>
-                    <span className="font-bold text-slate-800">{activeRequest?.destinationZone}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Paid via Razorpay</span>
-                    <span className="font-bold text-emerald-700">₹{poolData?.myShare?.poolFare || 360}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-200 pt-2 text-emerald-800 font-semibold">
-                    <span>You Saved</span>
-                    <span>₹{((poolData?.myShare?.soloFare || 740) - (poolData?.myShare?.poolFare || 360))} (35-51%)</span>
-                  </div>
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl">
+                  <p className="text-xs font-semibold text-emerald-900">Your Fare Paid (Captured)</p>
+                  <p className="text-3xl font-black text-emerald-950 mt-1">
+                    ₹{estimates?.estimatedPoolFare || 360}
+                  </p>
+                  <p className="text-[11px] text-emerald-700 mt-1">🌱 4.8 kg CO₂ Carbon Emission Saved</p>
                 </div>
 
                 <button
                   onClick={() => setShowRating(true)}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
+                  className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
                 >
-                  Rate Driver & Co-riders • रेटिंग दें
+                  Rate Driver & Co-Riders
                 </button>
               </div>
             )}
@@ -1210,21 +1224,21 @@ export default function Home() {
       </main>
 
       {/* Modals */}
+      <PaymentModal
+        isOpen={showPayment}
+        onClose={() => setShowPayment(false)}
+        poolFare={estimates?.estimatedPoolFare || 360}
+        soloFare={estimates?.soloFare || 740}
+        savingsPct={estimates?.savingsPct || 51}
+        onConfirmPayment={handleConfirmPoolWithPayment}
+      />
+
       <SOSModal
         isOpen={showSOS}
         onClose={() => setShowSOS(false)}
         tripId={poolData?.trip?.id}
         userId={currentUser?.id}
-        vehicleDetails={poolData?.vehicle ? `${poolData.vehicle.make} ${poolData.vehicle.licensePlate}` : undefined}
-      />
-
-      <PaymentModal
-        isOpen={showPayment}
-        onClose={() => setShowPayment(false)}
-        poolFare={poolData?.myShare?.poolFare || 360}
-        soloFare={poolData?.myShare?.soloFare || 740}
-        savingsPct={poolData?.myShare?.savingsPct || 51}
-        onConfirmPayment={handleConfirmPoolWithPayment}
+        vehicleDetails={poolData?.vehicle ? `${poolData.vehicle.model} (${poolData.vehicle.licensePlate})` : undefined}
       />
 
       <ShareTripModal
@@ -1239,9 +1253,8 @@ export default function Home() {
         isOpen={showRating}
         onClose={() => setShowRating(false)}
         tripId={poolData?.trip?.id || "demo-trip"}
-        userId={currentUser?.id || "u-1"}
+        userId={currentUser?.id || "user"}
         driverName={poolData?.driver?.name}
-        onRatingSubmitted={() => setStep("FLIGHT")}
       />
     </div>
   );

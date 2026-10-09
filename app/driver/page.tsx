@@ -72,7 +72,7 @@ export default function DriverViewPage() {
                 <Car className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="font-bold text-base">Driver Portal • चालक दृश्य</h1>
+                <h1 className="font-bold text-base">Driver Operations Portal</h1>
                 <p className="text-xs text-slate-400">Mumbai Airport Hub (BOM)</p>
               </div>
             </div>
@@ -117,7 +117,7 @@ export default function DriverViewPage() {
             {/* Ordered Route Stops */}
             <div>
               <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Ordered Route Stops / स्टॉप अनुक्रम:
+                Optimized Route Stops:
               </p>
               <div className="space-y-2">
                 {activeTrip.stops.map((stop: any) => (

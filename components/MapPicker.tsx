@@ -101,7 +101,7 @@ export default function MapPicker({
           onSelectZone(zone.id);
         });
 
-      marker.bindTooltip(`<b>${zone.name} (${zone.nameHi})</b>`, {
+      marker.bindTooltip(`<b>${zone.name}</b>`, {
         permanent: isSelected,
         direction: "top",
       });
@@ -162,8 +162,9 @@ export default function MapPicker({
   return (
     <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100">
       <div ref={mapContainerRef} style={{ width: "100%", height }} />
-      <div className="absolute top-2 left-2 z-20 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 shadow-xs border border-slate-200">
-        📍 मुंबई Mumbai Corridor Map
+      <div className="absolute top-2 left-2 z-20 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-700 shadow-xs border border-slate-200/80 flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+        <span>BOM Route Corridor Map</span>
       </div>
     </div>
   );
