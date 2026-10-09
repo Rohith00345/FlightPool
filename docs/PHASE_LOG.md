@@ -42,7 +42,7 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 - **Files Modified**:
   - `docker-compose.yml`: Added `postgis/postgis:16-3.4` service on port 5433 with healthcheck and named volume `flightpool_postgres_data`.
   - `.env.example`: Added `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT=5433`, and `DATABASE_URL`.
-  - `.env`: Configured `DATABASE_URL="postgresql://flightpool:flightpool_dev_pass@localhost:5433/flightpool?schema=public"`.
+  - `.env`: Configured `DATABASE_URL="postgresql://flightpool:YOUR_PASSWORD@localhost:5433/flightpool?schema=public"`.
   - `prisma/schema.prisma`: Switched `datasource db` provider from `sqlite` to `postgresql`.
   - `package.json`: Added `db:up`, `db:down`, `db:reset`, `db:migrate`, `db:seed`.
   - `lib/prisma.ts`: Removed `/tmp` SQLite fallback for Vercel.
