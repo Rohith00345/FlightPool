@@ -16,6 +16,7 @@ COPY . .
 
 ENV DATABASE_URL="file:./dev.db"
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DOCKER_BUILD=1
 
 # Generate Prisma client and seed database
 RUN npx prisma generate

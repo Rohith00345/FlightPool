@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Only use standalone output when explicitly running Docker build
+  ...(process.env.DOCKER_BUILD ? { output: "standalone" } : {}),
+  outputFileTracingIncludes: {
+    "/**": ["./prisma/dev.db"],
+  },
   turbopack: {
     rules: {
       "*.css": {
