@@ -147,7 +147,119 @@ async function main() {
   await prisma.driver.deleteMany();
   await prisma.vehicle.deleteMany();
   await prisma.flight.deleteMany();
+  await prisma.consent.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.sosEvent.deleteMany();
+  await prisma.driverIncentive.deleteMany();
+  await prisma.payout.deleteMany();
+  await prisma.ledgerEntry.deleteMany();
+  await prisma.ledgerAccount.deleteMany();
+  await prisma.pricingRule.deleteMany();
+  await prisma.pickupBay.deleteMany();
+  await prisma.terminal.deleteMany();
+  await prisma.zone.deleteMany();
+  await prisma.airport.deleteMany();
   await prisma.user.deleteMany();
+
+  console.log("Seeding Airport, Terminals, Bays & Zones for Mumbai (BOM)...");
+  const airport = await prisma.airport.create({
+    data: {
+      iataCode: "BOM",
+      name: "Chhatrapati Shivaji Maharaj International Airport",
+      city: "Mumbai",
+      timezone: "Asia/Kolkata",
+    },
+  });
+
+  const [t1, t2] = await Promise.all([
+    prisma.terminal.create({
+      data: {
+        airportId: airport.id,
+        code: "T1",
+        name: "Terminal 1 (Domestic / Santa Cruz)",
+      },
+    }),
+    prisma.terminal.create({
+      data: {
+        airportId: airport.id,
+        code: "T2",
+        name: "Terminal 2 (International & Domestic / Sahar)",
+      },
+    }),
+  ]);
+
+  await Promise.all([
+    prisma.pickupBay.create({ data: { terminalId: t2.id, label: "P4 Bay A" } }),
+    prisma.pickupBay.create({ data: { terminalId: t2.id, label: "P4 Bay B" } }),
+    prisma.pickupBay.create({ data: { terminalId: t2.id, label: "P4 Bay C" } }),
+    prisma.pickupBay.create({ data: { terminalId: t2.id, label: "P4 Bay D" } }),
+    prisma.pickupBay.create({ data: { terminalId: t1.id, label: "Lane 1 Bay A" } }),
+    prisma.pickupBay.create({ data: { terminalId: t1.id, label: "Lane 1 Bay B" } }),
+  ]);
+
+  const corridorMap: Record<string, string> = {
+    Thane: "EAST",
+    Mulund: "EAST",
+    Powai: "EAST",
+    Bandra: "WEST",
+    Andheri: "WEST",
+    "Navi Mumbai": "NAVI",
+  };
+
+  const createdZones = await Promise.all(
+    MUMBAI_ZONES.map((z) =>
+      prisma.zone.create({
+        data: {
+          airportId: airport.id,
+          code: z.name.toUpperCase().replace(/\s+/g, "_"),
+          name: z.name,
+          corridor: corridorMap[z.name] || "EAST",
+          lat: z.lat,
+          lng: z.lng,
+        },
+      })
+    )
+  );
+
+  console.log("Seeding Pricing Rules (Integer Paise) with Guaranteed 30% Savings...");
+  await prisma.pricingRule.create({
+    data: {
+      airportId: airport.id,
+      version: 1,
+      baseFarePaise: 12000, // ₹120
+      perKmPaise: 1800,     // ₹18/km
+      perMinPaise: 0,
+      nightMultiplier: 1.0,
+      minSavingPct: 30.0,
+      commissionPct: 15.0,
+      convenienceFeePaise: 2000, // ₹20
+    },
+  });
+
+  for (const zone of createdZones) {
+    await prisma.pricingRule.create({
+      data: {
+        airportId: airport.id,
+        zoneId: zone.id,
+        version: 1,
+        baseFarePaise: 12000,
+        perKmPaise: 1800,
+        perMinPaise: 0,
+        nightMultiplier: 1.0,
+        minSavingPct: 30.0,
+        commissionPct: 15.0,
+        convenienceFeePaise: 2000,
+      },
+    });
+  }
+
+  console.log("Seeding Platform Ledger Accounts...");
+  await Promise.all([
+    prisma.ledgerAccount.create({ data: { ownerType: "platform", accountType: "cash" } }),
+    prisma.ledgerAccount.create({ data: { ownerType: "platform", accountType: "receivable" } }),
+    prisma.ledgerAccount.create({ data: { ownerType: "platform", accountType: "commission" } }),
+    prisma.ledgerAccount.create({ data: { ownerType: "tax", accountType: "gst" } }),
+  ]);
 
   console.log("Creating Admin User...");
   const admin = await prisma.user.create({

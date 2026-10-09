@@ -61,16 +61,38 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ## Phase 2: Data Foundation & Schema Expansion (schema.sql alignment)
 
-- **Status**: In Progress
+- **Status**: Completed ✅
+- **Branch**: `production-upgrade`
+- **Files Touched**:
+  - `prisma/schema.prisma`: Added 12 production models (`Airport`, `Terminal`, `PickupBay`, `Zone`, `PricingRule`, `Consent`, `AuditLog`, `SosEvent`, `LedgerAccount`, `LedgerEntry`, `Payout`, `DriverIncentive`). Added `version` (optimistic locking) and `corridor` to `Pool`.
+  - `prisma/seed.ts`: Added seeding for Mumbai Airport (BOM), Terminals (T1, T2), 6 pickup bays, 6 destination zones across 3 corridors, default pricing rules with integer paise (12000 paise base, 1800 paise/km), and platform double-entry ledger accounts.
+  - `app/api/admin/metrics/route.ts`: Converted static average wait time metric into dynamic database calculation querying passenger request ready times.
+- **Verification**:
+  - PostgreSQL schema pushed and synced with 25 tables in public schema.
+  - Seed executed successfully with all relation constraints verified.
+  - Vitest: 25/25 passing (327ms).
+  - Playwright E2E: 5/5 passing (6.6s).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+
+---
+
+## Phase 3: Auth, RBAC, Security & Compliance (Phase B)
+
+- **Status**: Ready to Implement
 - **Objectives**:
-  1. Add missing models from `docs/schema.sql` into `prisma/schema.prisma`:
-     - Geography: `Airport`, `Terminal`, `PickupBay`, `Zone`.
-     - Pricing: `PricingRule` with integer paise and minimum 30% savings guarantee.
-     - Trust & Safety: `Consent`, `AuditLog`, `SosEvent`.
-     - Finance: `LedgerAccount`, `LedgerEntry` (double-entry), `Payout`, `DriverIncentive`.
-     - Pool concurrency: Add `version Int @default(1)` optimistic locking column to `Pool`.
-  2. Maintain 100% backward compatibility with existing active fields so existing routes and tests remain green.
-  3. Expand `prisma/seed.ts` to populate Airport (BOM), Terminals (T1, T2), Pickup Bays, Mumbai Corridors/Zones, and initial PricingRules.
-  4. Verify migrations and tests.
+  1. Server-Side RBAC & Route Protection:
+     - Enforce role gates on `/admin` and `/api/admin/*` (ADMIN role only).
+     - Enforce role gates on `/driver` and `/api/driver/*` (DRIVER role only).
+     - Guard anonymous access with redirects or 403 Forbidden.
+  2. Phone OTP Authentication Hardening:
+     - Support `DEMO_MODE=true` for local reviewers / E2E tests (`123456` dev OTP allowed when `DEMO_MODE !== 'false'`).
+     - In-memory / DB rate limiting for OTP generation and verification attempts (max 5 attempts, 10 min window).
+     - Set secure HTTP-only session cookies / signed auth tokens for user identification.
+  3. Audit Logging:
+     - Persist `AuditLog` records on admin simulator actions (`/api/admin/simulate-flight`) and administrative modifications.
+  4. Privacy & Consent Compliance:
+     - Consent logging in `consents` table when submitting boarding pass data or requesting rides.
+     - Add privacy disclosure and "Delete My Data" endpoint (`/api/user/delete-data`).
+
 
 
