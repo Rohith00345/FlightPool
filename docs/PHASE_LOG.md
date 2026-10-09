@@ -37,16 +37,40 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ## Phase 1: Persistence (Local Docker PostgreSQL Setup)
 
-- **Status**: Checkpoint (Waiting for local Docker engine restart)
+- **Status**: Completed ✅
 - **Branch**: `production-upgrade`
 - **Files Modified**:
   - `docker-compose.yml`: Added `postgis/postgis:16-3.4` service on port 5433 with healthcheck and named volume `flightpool_postgres_data`.
   - `.env.example`: Added `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT=5433`, and `DATABASE_URL`.
-  - `.env`: Updated to point to `postgresql://flightpool:flightpool_dev_pass@localhost:5433/flightpool?schema=public`.
-  - `.gitignore`: Whitelisted `!.env.example`.
+  - `.env`: Configured `DATABASE_URL="postgresql://flightpool:flightpool_dev_pass@localhost:5433/flightpool?schema=public"`.
+  - `prisma/schema.prisma`: Switched `datasource db` provider from `sqlite` to `postgresql`.
   - `package.json`: Added `db:up`, `db:down`, `db:reset`, `db:migrate`, `db:seed`.
   - `lib/prisma.ts`: Removed `/tmp` SQLite fallback for Vercel.
   - `next.config.ts`: Cleaned up `outputFileTracingIncludes` for `dev.db`.
-- **Blocker Encountered**: `Error response from daemon: Docker Desktop is unable to start` due to missing Windows Subsystem for Linux (WSL2).
-- **Resolution**: User installing WSL2 via `wsl --install` and restarting machine.
+- **Database Verification**:
+  - Docker container `flightpool-postgres` running healthy (`postgis/postgis:16-3.4` on port 5433).
+  - PostGIS 3.4 and PostgreSQL 16.4 verified active.
+  - Tables generated via `prisma db push` and verified on PostgreSQL schema `public`.
+  - Database seeded successfully (`npx prisma db seed` -> 43 users, 15 flights, 5 drivers, 5 vehicles, 2 active pools).
+- **Test Results**:
+  - Vitest: 25/25 tests passing (351ms).
+  - Playwright E2E: 5/5 tests passing (7.9s).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+
+---
+
+## Phase 2: Data Foundation & Schema Expansion (schema.sql alignment)
+
+- **Status**: In Progress
+- **Objectives**:
+  1. Add missing models from `docs/schema.sql` into `prisma/schema.prisma`:
+     - Geography: `Airport`, `Terminal`, `PickupBay`, `Zone`.
+     - Pricing: `PricingRule` with integer paise and minimum 30% savings guarantee.
+     - Trust & Safety: `Consent`, `AuditLog`, `SosEvent`.
+     - Finance: `LedgerAccount`, `LedgerEntry` (double-entry), `Payout`, `DriverIncentive`.
+     - Pool concurrency: Add `version Int @default(1)` optimistic locking column to `Pool`.
+  2. Maintain 100% backward compatibility with existing active fields so existing routes and tests remain green.
+  3. Expand `prisma/seed.ts` to populate Airport (BOM), Terminals (T1, T2), Pickup Bays, Mumbai Corridors/Zones, and initial PricingRules.
+  4. Verify migrations and tests.
+
 
