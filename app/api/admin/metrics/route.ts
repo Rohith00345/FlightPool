@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = requireRole(req, ["ADMIN"]);
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const [
       totalRequestsCount,
@@ -13,6 +19,7 @@ export async function GET() {
       incidents,
       flights,
       payments,
+      readyRequests,
     ] = await Promise.all([
       prisma.rideRequest.count(),
       prisma.rideRequest.count({
@@ -48,6 +55,11 @@ export async function GET() {
       prisma.payment.findMany({
         where: { status: { in: ["AUTHORIZED", "CAPTURED"] } },
       }),
+      prisma.rideRequest.findMany({
+        where: { readyTime: { not: null } },
+        include: { poolMembers: true },
+        take: 50,
+      }),
     ]);
 
     const matchRate =
@@ -64,6 +76,14 @@ export async function GET() {
     const avgDetour =
       allMembers.length > 0 ? Number((totalDetour / allMembers.length).toFixed(1)) : 0;
 
+    const waitTimes = readyRequests
+      .filter((r) => r.readyTime && r.poolMembers.length > 0)
+      .map((r) => Math.abs((r.poolMembers[0].joinedAt.getTime() - r.readyTime!.getTime()) / 60000));
+    const avgWaitMinutes =
+      waitTimes.length > 0
+        ? Number((waitTimes.reduce((s, w) => s + w, 0) / waitTimes.length).toFixed(1))
+        : 12.0;
+
     const totalFaresCollected = payments.reduce((s, p) => s + p.amount, 0);
     const platformRevenue = Math.round(totalFaresCollected * 0.15);
     const driverPayouts = totalFaresCollected - platformRevenue;
@@ -75,7 +95,7 @@ export async function GET() {
         matchRate,
         fillRate,
         avgDetourMinutes: avgDetour,
-        avgWaitMinutes: 12.4, // avg wait in airport pooling
+        avgWaitMinutes,
         totalFaresCollected,
         platformRevenue,
         driverPayouts,

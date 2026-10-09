@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MUMBAI_ZONES, AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes } from "@/lib/geo";
 import { calculateSoloFare, getTimeOfDayMultiplier } from "@/lib/pricing";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,6 +24,25 @@ export async function POST(req: NextRequest) {
         { error: "userId, flightId, and destinationZone are required" },
         { status: 400 }
       );
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot create ride request for another user" },
+        { status: 403 }
+      );
+    }
+
+    // Verification check for women-only pools
+    if (womenOnly) {
+      const rider = await prisma.user.findUnique({ where: { id: userId } });
+      if (!rider || rider.gender !== "FEMALE" || !rider.genderVerified) {
+        return NextResponse.json(
+          { error: "Women-only pools are exclusively available to verified female passengers" },
+          { status: 400 }
+        );
+      }
     }
 
     const flight = await prisma.flight.findUnique({

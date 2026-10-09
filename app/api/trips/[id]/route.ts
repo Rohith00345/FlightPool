@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { defaultPaymentProvider } from "@/lib/payments/provider";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,18 @@ export async function GET(
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN") {
+      const isRiderInTrip = trip.pool.members.some((m) => m.userId === session.userId);
+      const isAssignedDriver = trip.driverId === session.userId || trip.driver.phone === session.phone;
+      if (!isRiderInTrip && !isAssignedDriver) {
+        return NextResponse.json(
+          { error: "Forbidden: You are not authorized to view this trip" },
+          { status: 403 }
+        );
+      }
     }
 
     return NextResponse.json({
@@ -101,6 +114,7 @@ export async function PATCH(
     const trip = await prisma.trip.findUnique({
       where: { id },
       include: {
+        driver: true,
         pool: {
           include: {
             members: {
@@ -115,6 +129,17 @@ export async function PATCH(
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN") {
+      const isAssignedDriver = trip.driverId === session.userId || trip.driver.phone === session.phone;
+      if (!isAssignedDriver) {
+        return NextResponse.json(
+          { error: "Forbidden: Only the assigned driver can update trip lifecycle" },
+          { status: 403 }
+        );
+      }
     }
 
     let nextStatus = status;

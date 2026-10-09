@@ -2,8 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { matchRiderRequests, RiderRequest } from "@/lib/matching";
 import { calculatePoolPricing } from "@/lib/pricing";
+import { requireRole } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo";
 
 export async function POST(req: NextRequest) {
+  const auth = requireRole(req, ["ADMIN"]);
+  if (auth.response) {
+    return auth.response;
+  }
+
+  if (!isDemoMode()) {
+    return NextResponse.json(
+      { error: "Forbidden", message: "Flight simulation is only permitted when DEMO_MODE=true" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const { flightNumber } = body;
@@ -178,6 +192,27 @@ export async function POST(req: NextRequest) {
           data: { status: "POOLING" },
         });
       }
+    }
+
+    // Persist Audit Log for administrative action
+    try {
+      await prisma.auditLog.create({
+        data: {
+          actorId: auth.session.userId,
+          action: "SIMULATE_FLIGHT_LANDING",
+          entityType: "FLIGHT",
+          entityId: flight.flightNumber,
+          after: JSON.stringify({
+            flightNumber: flight.flightNumber,
+            airline: flight.airline,
+            terminal: flight.terminal,
+            newPoolsFormed,
+            passengersProcessed: unassigned.length,
+          }),
+        },
+      });
+    } catch (auditErr) {
+      console.warn("Failed to create audit log:", auditErr);
     }
 
     return NextResponse.json({

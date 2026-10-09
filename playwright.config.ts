@@ -18,10 +18,28 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "npm run start",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  webServer: [
+    {
+      command: "npm run start",
+      url: "http://localhost:3000",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      env: {
+        DEMO_MODE: "true",
+        NEXT_PUBLIC_DEMO_MODE: "true",
+        PORT: "3000",
+      },
+    },
+    {
+      command: "npx next start -p 3001",
+      url: "http://localhost:3001",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      env: {
+        PORT: "3001",
+        DEMO_MODE: "",
+        NEXT_PUBLIC_DEMO_MODE: "",
+      },
+    },
+  ],
 });

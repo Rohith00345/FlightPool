@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,7 +12,8 @@ model User {
   name          String
   phone         String    @unique
   email         String?   @unique
-  gender        String    @default("UNSPECIFIED") // MALE, FEMALE, OTHER, UNSPECIFIED
+  gender        String    @default("PREFER_NOT_TO_SAY") // MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY, UNSPECIFIED
+  genderVerified Boolean  @default(false)
   role          String    @default("RIDER")       // RIDER, DRIVER, ADMIN
   avatarUrl     String?
   createdAt     DateTime  @default(now())
@@ -25,6 +26,7 @@ model User {
   ratingsGiven  Rating[]                @relation("UserRatingsGiven")
   ratingsReceived Rating[]              @relation("UserRatingsReceived")
   incidents     Incident[]
+  consents      Consent[]
 }
 
 model Flight {
@@ -87,6 +89,8 @@ model Pool {
   waitCapExpiry      DateTime?
   vehicleId          String?
   driverId           String?
+  version            Int          @default(1)
+  corridor           String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -225,4 +229,176 @@ model Incident {
   trip        Trip?     @relation(fields: [tripId], references: [id])
   user        User?     @relation(fields: [userId], references: [id])
   pool        Pool?     @relation(fields: [poolId], references: [id])
+}
+
+// ---------------------------------------------------------------- GEOGRAPHY & AIRPORT
+model Airport {
+  id           String        @id @default(cuid())
+  iataCode     String        @unique // "BOM"
+  name         String        // "Chhatrapati Shivaji Maharaj International Airport"
+  city         String        @default("Mumbai")
+  timezone     String        @default("Asia/Kolkata")
+  terminals    Terminal[]
+  zones        Zone[]
+  pricingRules PricingRule[]
+  createdAt    DateTime      @default(now())
+}
+
+model Terminal {
+  id         String      @id @default(cuid())
+  airportId  String
+  code       String      // "T1", "T2"
+  name       String?     // "Terminal 2 International/Domestic"
+  airport    Airport     @relation(fields: [airportId], references: [id], onDelete: Cascade)
+  pickupBays PickupBay[]
+  createdAt  DateTime    @default(now())
+
+  @@unique([airportId, code])
+}
+
+model PickupBay {
+  id         String   @id @default(cuid())
+  terminalId String
+  label      String   // "P4 Bay A", "P4 Bay B", etc.
+  active     Boolean  @default(true)
+  terminal   Terminal @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([terminalId, label])
+}
+
+model Zone {
+  id           String        @id @default(cuid())
+  airportId    String
+  code         String        // "THANE", "MULUND", "POWAI", "BANDRA", "ANDHERI", "NAVI_MUMBAI"
+  name         String        // "Thane"
+  corridor     String        // "EAST", "WEST", "NAVI"
+  lat          Float
+  lng          Float
+  airport      Airport       @relation(fields: [airportId], references: [id], onDelete: Cascade)
+  pricingRules PricingRule[]
+  createdAt    DateTime      @default(now())
+
+  @@unique([airportId, code])
+}
+
+// ---------------------------------------------------------------- PRICING RULES (Integer Paise)
+model PricingRule {
+  id                  String    @id @default(cuid())
+  airportId           String
+  zoneId              String?
+  version             Int       @default(1)
+  baseFarePaise       Int       @default(12000) // ₹120.00
+  perKmPaise          Int       @default(1800)  // ₹18.00
+  perMinPaise         Int       @default(0)
+  nightMultiplier     Float     @default(1.0)
+  minSavingPct        Float     @default(30.0)
+  commissionPct       Float     @default(15.0)
+  convenienceFeePaise Int       @default(2000)  // ₹20.00
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  airport             Airport   @relation(fields: [airportId], references: [id], onDelete: Cascade)
+  zone                Zone?     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([airportId, zoneId, version])
+}
+
+// ---------------------------------------------------------------- TRUST, SAFETY & AUDIT
+model Consent {
+  id        String    @id @default(cuid())
+  userId    String
+  purpose   String    // "boarding_pass_data", "location", "terms"
+  version   String    @default("1.0")
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+  ip        String?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String   // "LOGIN", "SIMULATE_FLIGHT", "POOL_OVERRIDE", etc.
+  entityType String   // "POOL", "TRIP", "USER", etc.
+  entityId   String?
+  before     String?
+  after      String?
+  ip         String?
+  createdAt  DateTime @default(now())
+}
+
+model SosEvent {
+  id             String    @id @default(cuid())
+  userId         String?
+  tripId         String?
+  status         String    @default("OPEN") // OPEN, ACKNOWLEDGED, RESOLVED
+  severity       String    @default("S1")   // S1, S2, S3, S4
+  triggeredAt    DateTime  @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+}
+
+// ---------------------------------------------------------------- FINANCE & DOUBLE-ENTRY LEDGER
+model LedgerAccount {
+  id          String        @id @default(cuid())
+  ownerType   String        // "platform", "rider", "driver", "tax"
+  ownerId     String?
+  accountType String        // "cash", "receivable", "payable", "commission", "gst"
+  currency    String        @default("INR")
+  entries     LedgerEntry[]
+  createdAt   DateTime      @default(now())
+
+  @@unique([ownerType, ownerId, accountType])
+}
+
+model LedgerEntry {
+  id          String        @id @default(cuid())
+  txnId       String
+  accountId   String
+  direction   String        // "DEBIT", "CREDIT"
+  amountPaise Int           // integer paise
+  refType     String?       // "PAYMENT", "REFUND", "PAYOUT"
+  refId       String?
+  createdAt   DateTime      @default(now())
+  account     LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([txnId])
+}
+
+model Payout {
+  id              String    @id @default(cuid())
+  driverId        String
+  periodStart     DateTime
+  periodEnd       DateTime
+  grossPaise      Int
+  commissionPaise Int
+  netPaise        Int
+  status          String    @default("PENDING") // PENDING, PAID, FAILED
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([driverId, periodStart, periodEnd])
+}
+
+model DriverIncentive {
+  id          String   @id @default(cuid())
+  driverId    String
+  tripId      String?
+  type        String   // "guarantee_topup", "peak_bonus"
+  amountPaise Int
+  createdAt   DateTime @default(now())
+}
+
+model OtpRequest {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  purpose    String    @default("login")
+  attempts   Int       @default(0)
+  ip         String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }

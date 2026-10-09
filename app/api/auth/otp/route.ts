@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkOtpRateLimit, consumeOtpInDatabase, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,17 +15,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    // Rate limiting: Max 5 attempts per 10 minutes (backed by PostgreSQL OtpRequest table)
+    const rateCheck = await checkOtpRateLimit(identifier, ip, otp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many OTP attempts. Please wait 10 minutes before trying again." },
+        { status: 429 }
+      );
+    }
+
+    const demo = isDemoMode();
+
     // Phase 1 / Auth: OTP request vs verification
     if (!otp) {
       // Step 1: Send OTP request
       return NextResponse.json({
         success: true,
-        message: "OTP sent to " + identifier + ". In dev mode, use OTP: 123456",
-        otpHint: "123456",
+        message: demo
+          ? "OTP sent to " + identifier + ". In dev mode, use OTP: 123456"
+          : "OTP sent to " + identifier,
+        ...(demo ? { otpHint: "123456" } : {}),
+        remainingAttempts: rateCheck.remaining,
       });
     }
 
     // Step 2: Verify OTP
+    if (!demo) {
+      // When demo mode is OFF, dev OTP 123456 is strictly rejected
+      return NextResponse.json(
+        { error: "Production mode active: Live SMS verification provider required." },
+        { status: 403 }
+      );
+    }
+
     if (otp !== "123456") {
       return NextResponse.json(
         { error: "Invalid OTP code. Please enter 123456" },
@@ -50,28 +75,57 @@ export async function POST(req: NextRequest) {
           phone,
           email,
           name: name || (isEmail ? identifier.split("@")[0] : "Mumbai Traveler"),
-          gender: gender || "UNSPECIFIED",
+          gender: gender || "PREFER_NOT_TO_SAY",
+          genderVerified: gender === "FEMALE",
           role: role || "RIDER",
         },
       });
-    } else if (gender && user.gender === "UNSPECIFIED") {
+    } else if (gender && (user.gender === "UNSPECIFIED" || user.gender === "PREFER_NOT_TO_SAY")) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { gender },
+        data: {
+          gender,
+          genderVerified: gender === "FEMALE" ? true : user.genderVerified,
+        },
       });
     }
 
-    return NextResponse.json({
+    await consumeOtpInDatabase(user.phone);
+
+    const userRole = (user.role as SessionPayload["role"]) || "RIDER";
+    const token = signSessionToken({
+      userId: user.id,
+      role: userRole,
+      phone: user.phone,
+      name: user.name,
+    });
+
+    const response = NextResponse.json({
       success: true,
+      token,
       user: {
         id: user.id,
         name: user.name,
         phone: user.phone,
         email: user.email,
         gender: user.gender,
+        genderVerified: user.genderVerified,
         role: user.role,
       },
     });
+
+    // Set HTTP-only secure cookie
+    response.cookies.set({
+      name: COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return response;
   } catch (error: unknown) {
     console.error("Auth error:", error);
     return NextResponse.json(

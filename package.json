@@ -9,7 +9,14 @@
     "lint": "eslint",
     "test": "vitest run tests/matching.test.ts tests/pricing.test.ts",
     "test:e2e": "playwright test",
-    "simulate": "tsx scripts/simulate.ts"
+    "simulate": "tsx scripts/simulate.ts",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset --force",
+    "db:seed": "tsx prisma/seed.ts --prod",
+    "db:seed:demo": "tsx prisma/seed.ts --demo",
+    "job:retention": "tsx scripts/retention-job.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

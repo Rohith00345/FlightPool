@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionFromRequest } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
@@ -14,6 +15,14 @@ export async function POST(
       return NextResponse.json(
         { error: "raterUserId and score are required" },
         { status: 400 }
+      );
+    }
+
+    const session = getSessionFromRequest(req);
+    if (session && session.role !== "ADMIN" && session.userId !== raterUserId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot submit rating on behalf of another user" },
+        { status: 403 }
       );
     }
 
