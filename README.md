@@ -1,43 +1,37 @@
-# ✈️ FlightPool
+# ✈️ FlightPool (Night Runway)
 
-> **Mobile-first PWA for Mumbai Airport (BOM) passengers to share cabs and split fares to nearby destination corridors.**
+> **Mobile-first PWA for Mumbai Airport (BOM) passengers to share cabs, split fares to destination corridors, and reduce airport congestion.**
 
-[![Live on Vercel](https://img.shields.io/badge/Vercel-Live%20Demo-black?logo=vercel)](https://flight-pool-red.vercel.app/)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Rohith00345%2FFlightPool-181717?logo=github)](https://github.com/Rohith00345/FlightPool)
-[![Tests: Vitest 25/25](https://img.shields.io/badge/Vitest-25%2F25%20Passed-green?logo=vitest)](https://github.com/Rohith00345/FlightPool)
-[![E2E: Playwright 5/5](https://img.shields.io/badge/Playwright-5%2F5%20Passed-blue?logo=playwright)](https://github.com/Rohith00345/FlightPool)
+[![Branch: mega-upgrade](https://img.shields.io/badge/Branch-mega--upgrade-amber)](https://github.com/Rohith00345/FlightPool)
+[![Vitest: 66/66](https://img.shields.io/badge/Vitest-66%2F66%20Passed-green?logo=vitest)](https://github.com/Rohith00345/FlightPool)
+[![Playwright E2E: 43/43](https://img.shields.io/badge/Playwright-43%2F43%20Passed-blue?logo=playwright)](https://github.com/Rohith00345/FlightPool)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.4.0%20(Turbopack)-black?logo=next.js)](https://nextjs.org/)
+[![Accessibility: WCAG AA](https://img.shields.io/badge/Axe--core-WCAG%20AA%200%20Violations-emerald)](https://github.com/Rohith00345/FlightPool)
 
 ---
 
-## 🌐 Live Deployment Links
+## 🌟 What's New in the Mega-Upgrade (Night Runway)
 
-Experience FlightPool in action on Vercel:
-
-| Interface | URL | Description |
-| :--- | :--- | :--- |
-| 📱 **Passenger PWA** | [flight-pool-red.vercel.app](https://flight-pool-red.vercel.app/) | Mobile-first onboarding, flight verification, corridor map, pool match & OTP authorization. |
-| 📊 **Admin & Ops Dashboard** | [flight-pool-red.vercel.app/admin](https://flight-pool-red.vercel.app/admin) | Live KPI metrics (Match Rate, Fill Rate, Payouts), safety logs, and interactive "Land a Flight" simulator. |
-| 🚕 **Driver Portal** | [flight-pool-red.vercel.app/driver](https://flight-pool-red.vercel.app/driver) | Turn-by-turn pickup/drop route sequence, passenger OTP validation & 85% transparent payout. |
-
----
-
-## 🌟 Key Features
-
-- 📱 **Mobile-First PWA UX**: Designed with 48px tap targets, one primary action per screen, and works seamlessly down to 360px viewport width.
-- 🛫 **Flight & Boarding Pass Verification**: Mock scanning and verification tied to real flight arrival schedules at **Mumbai Airport (BOM Terminal 1 & 2)**.
-- 🗺️ **Interactive Leaflet Map**: Visualizes Mumbai Airport terminals and destination corridors (Thane, Mulund, Powai, Bandra, Andheri, Navi Mumbai) with route polylines and drop-off markers.
-- 🧮 **Pure Matching Engine (`/lib/matching`)**: Matches riders within a 30-minute flight window, enforces max 4 riders per cab, luggage capacity (max 4 bags), max detour cap (≤ 20 min), and women-only pools.
-- 💰 **Fair Pricing Engine (`/lib/pricing`)**: Solo fare based on base + distance + time-of-day multipliers. Pool fare provides guaranteed **minimum 30% savings** (up to 52%), exact integer rupee rounding, and transparent driver payout (85%) / platform commission (15%).
-- 🛡️ **Safety & Trust**:
-  - **Women-only pool option**: Strictly matches verified female travelers together.
-  - **Privacy**: Masks exact street addresses until pool confirmation.
-  - **Penalty-Free Cancellation**: Leave a forming pool anytime before driver dispatch.
-  - **Emergency SOS**: Alerts Mumbai Airport Security & Mumbai Police (112) with instant emergency dialer.
-  - **Live Trip Sharing**: Shareable tracking links for friends and family.
-- 💳 **Mock Razorpay Flow**: Interface-driven payment lifecycle (`PaymentProvider`: Authorization on pool confirmation -> Capture on drop-off completion -> Instant refund on pool collapse).
-- 📊 **Admin Operations Dashboard (`/admin`)**: Real-time KPI metrics (Match rate, Fill rate, Avg wait, Avg detour, Revenue) and an interactive **"Land a Flight"** simulation panel.
-- 🚕 **Driver View (`/driver`)**: Ordered pickup/drop route sequence, OTP validation, and payout tracking.
+1. 🌌 **Night Runway Design System**:
+   - Dark-first cockpit flight-deck ambiance with glowing amber (`#FFB020`), teal (`#2DE2C4`), and violet (`#7C6CFF`) tokens.
+   - Built with Next.js managed typography (`Space Grotesk`, `Inter`, `JetBrains Mono`, `Noto Sans Devanagari`).
+   - Three theme modes: **Night Runway** (Dark Default), **Daylight Terminal** (Light), and **AMOLED Black**.
+   - Built-in tactile haptics (`navigator.vibrate`) and reduced-motion support.
+2. 🛬 **Landing Wave Arrivals Board (`/landing-wave`)**:
+   - Split-flap arrivals schedule showing incoming flights to BOM Terminal 1 & 2 with active pooling corridors.
+3. 🎮 **FlightDeck Gamification Layer (`/` Rewards Tab)**:
+   - Flight Score (0–1000) across 5 weighted categories (Reliability 30%, Community 25%, Safety 20%, Loyalty 15%, Profile 10%).
+   - Tiers (Taxi, Takeoff, Cruise, Jet Stream, Supersonic) and Ranks (Ground Crew to Ace).
+   - Miles store, season quests with streak freeze, passport stamps, and opt-in Green Miles leaderboard.
+   - Fail-closed demo gating: Active mock gamification in demo mode; tasteful "Rewards coming soon" in production.
+4. 🛡️ **Enterprise Security & DPDP Compliance**:
+   - Strict RBAC across all 28 API routes (`docs/ROUTE_ACCESS_TABLE.md`).
+   - Constant-time HMAC signatures for webhooks and session tokens.
+   - Bounded wait-cap evaluation with explicit user consent before solo conversion.
+   - Strict integer paise money standard (`docs/MONEY_UNITS.md`).
+5. 📊 **Admin Bento Fleet Dashboard (`/admin`)**:
+   - 6 essential fleet KPIs including wait time formula (`confirmedAt - readyAt`) and fill rate with/without solo.
+   - Command Palette (`Ctrl+K` / `Cmd+K`) for rapid airport operations control.
 
 ---
 
@@ -45,167 +39,64 @@ Experience FlightPool in action on Vercel:
 
 ```mermaid
 flowchart TD
-    subgraph Client [Mobile PWA - Next.js App Router]
-        UI[Rider Interface /]
-        Map[Leaflet Corridor Map]
-        DriverUI[Driver Portal /driver]
-        AdminUI[Admin Dashboard /admin]
+    subgraph Client [Client PWA Interfaces]
+        RiderUI["Rider Interface (/) - 4-Tab Bottom Nav"]
+        WaveUI["Landing Wave Board (/landing-wave)"]
+        DriverUI["Driver Portal (/driver) - Earnings & Route Steps"]
+        MarshalUI["Marshal Station (/marshal) - Bay A-D Ops"]
+        AdminUI["Admin Bento Dashboard (/admin) - Ctrl+K Palette"]
     end
 
-    subgraph CoreEngines [Pure Domain Modules]
-        MatchEngine["Matching Engine (/lib/matching)\n- Flight window grouping\n- Luggage capacity (max 4)\n- Detour cap (<=20m)\n- Women-only filtering"]
-        PriceEngine["Pricing Engine (/lib/pricing)\n- Solo fare & Time multipliers\n- Guaranteed >=30% savings\n- Exact integer rupee sum\n- 85% Driver / 15% Platform"]
-        GeoModule["Geo & Routing (/lib/geo)\n- BOM T1 & T2 terminals\n- Haversine + 1.32x traffic factor"]
+    subgraph CoreEngines [Pure Domain Logic]
+        MatchEngine["Matching Engine (/lib/matching)\n- Corridor grouping\n- Detour cap (<=20m)\n- Women-only filtering"]
+        PriceEngine["Pricing Engine (/lib/pricing)\n- Integer paise standard\n- >=30% savings\n- 85% Driver / 15% Platform"]
+        GameEngine["Gamification Provider (/lib/gamification)\n- Flight Score (0-1000)\n- Tiers & Quests\n- Gate Trivia"]
     end
 
-    subgraph BackendAPI [App Router API Routes]
-        AuthAPI["/api/auth/otp (Dev OTP: 123456)"]
-        VerifyAPI["/api/verification"]
+    subgraph BackendAPI [Protected REST API Routes]
+        AuthAPI["/api/auth/otp"]
         RidesAPI["/api/rides/request & status"]
         PoolsAPI["/api/pools/match, confirm, leave, solo"]
-        TripsAPI["/api/trips/[id], /sos, /rate"]
-        AdminAPI["/api/admin/metrics & simulate-flight"]
+        TripsAPI["/api/trips/[id], stream, sos, rate"]
+        MarshalAPI["/api/marshal/station"]
+        AdminAPI["/api/admin/metrics, simulate-flight"]
     end
 
-    subgraph DataPayments [Storage & Payments]
-        PrismaDB[(SQLite dev.db / Prisma ORM)]
-        MockRazorpay["PaymentProvider (Mock Razorpay)\n- Idempotency keys\n- Authorize -> Capture -> Refund"]
+    subgraph DataLedger [Storage & Double-Entry Ledger]
+        Postgres[(Docker PostgreSQL - localhost:5433)]
+        Ledger["Double-Entry Ledger\n- RIDER_WALLET -> REVENUE / PAYOUT\n- Unconfirmed payouts stay PENDING"]
     end
 
-    UI --> BackendAPI
+    RiderUI --> BackendAPI
+    WaveUI --> BackendAPI
     DriverUI --> BackendAPI
+    MarshalUI --> BackendAPI
     AdminUI --> BackendAPI
     BackendAPI --> CoreEngines
-    BackendAPI --> DataPayments
+    BackendAPI --> DataLedger
 ```
 
 ---
 
-## 🚀 Quickstart & Local Setup
+## 🚀 Local Development Quickstart
 
 ### Prerequisites
-- Node.js 18+ (tested on Node v20 LTS)
-- npm 9+
+- Node.js 20 LTS
+- Local Docker running PostgreSQL on `localhost:5433` (`flightpool-postgres`)
 
-### 1. Clone & Install Dependencies
+### 1. Verification & Preflight
 ```bash
-git clone https://github.com/Rohith00345/FlightPool.git
-cd FlightPool
-npm install
+npm run check       # Runs preflight environment & database safety check
+npm run verify      # Runs complete TypeScript, ESLint, and Vitest test suites
 ```
 
-### 2. Database Setup & Seeding
+### 2. Run Test Suites
 ```bash
-# Push Prisma schema to SQLite
-npx prisma db push
-
-# Seed 15 flights, 5 drivers/cabs, and 42 passengers across Mumbai zones
-npx prisma db seed
+npm test            # Runs 66 unit & integration tests
+npx playwright test # Runs complete e2e browser test suite
 ```
 
 ### 3. Run Development Server
 ```bash
-npm run dev
+npm run dev         # Starts Next.js with Turbopack on http://localhost:3000
 ```
-Open **[http://localhost:3000](http://localhost:3000)** in your mobile device simulator or browser (recommended viewport: 375px width).
-
----
-
-## 🧪 Testing & Validation
-
-### Vitest Unit Tests (Matching & Pricing Engines)
-Runs 25 comprehensive unit tests covering all matching constraints, detour permutations, women-only filters, mid-pool cancellations, and pricing rounding integrity:
-```bash
-npm test
-```
-*Result: 25/25 passing across `tests/matching.test.ts` and `tests/pricing.test.ts`.*
-
-### Playwright E2E Tests
-Runs automated browser tests covering the core end-to-end user journeys:
-1. 3 riders match and complete full trip lifecycle
-2. Rider falls back to solo ride after wait cap
-3. Rider cancels mid-pool penalty-free
-4. Women-only pool strict segregation
-5. 360px mobile viewport rendering & bilingual labels
-```bash
-npm run test:e2e
-```
-*Result: 5/5 passing across `tests/e2e/flightpool.spec.ts`.*
-
-### Simulation CLI
-Replay a flight landing from terminal CLI to observe pool formation, route detour, and fare distribution:
-```bash
-# Run simulation for Indigo 6E-204 from Delhi
-npm run simulate 6E-204
-
-# Run simulation for Air India AI-865 from Bengaluru
-npm run simulate AI-865
-```
-
----
-
-## 🎬 Reviewer Demo Script (End-to-End Walkthrough)
-
-You can run this demo either on **[https://flight-pool-red.vercel.app](https://flight-pool-red.vercel.app)** or locally at `http://localhost:3000`:
-
-1. **Rider Onboarding & Login**:
-   - Open `/` in a mobile viewport (e.g., iPhone 14 / 375px).
-   - Click the **"Aarav Sharma"** quick-persona card (or enter any mobile number with dev OTP `123456`).
-   - Click **CONTINUE TO FLIGHT**.
-
-2. **Flight & Boarding Pass Verification**:
-   - Select flight **6E-204 (DEL → BOM T2)**.
-   - Click **CONFIRM FLIGHT 6E-204**.
-   - Review the digital boarding pass card with PNR and seat number.
-   - Click **VERIFY & CONTINUE**.
-
-3. **Destination & Upfront Fare**:
-   - Tap on the **Thane** zone chip (or click on the interactive Mumbai corridor map).
-   - Notice the upfront fare card: **₹360 instead of ₹740 • Save ₹380 (51%)**.
-   - Choose luggage count (e.g., 1 bag).
-   - Click **I'VE LANDED & READY**.
-
-4. **Pool Formation & Mock Payment**:
-   - View real-time pool formation with co-riders (e.g., Vikram Mehta, Rohan Kulkarni).
-   - Notice other co-riders' exact addresses are masked to zone level for safety.
-   - Click **CONFIRM & LOCK SHARE (₹360)**.
-   - Select UPI (GPay/PhonePe) in the Razorpay sandbox modal and tap **AUTHORIZE ₹360**.
-
-5. **Driver Assignment & Live Trip**:
-   - Cab is assigned with driver details (Ramesh Shinde, ⭐ 4.9, Maruti Dzire `MH-02-EE-4123`).
-   - Notice the 4-digit security OTP to share when boarding at Terminal 2.
-   - Try the **Share Trip Link** button to copy or test the live tracking link.
-   - Try the **Emergency SOS** button to view Mumbai Police (112) & Airport Security dispatch.
-
-6. **Driver Progression & Trip Completion**:
-   - In a new tab, navigate to `/driver`.
-   - Click **En Route to Terminal Pickup** -> **All Passengers Boarded** -> **Complete All Drop-offs**.
-   - Payment is automatically captured, and driver sees transparent 85% payout.
-
-7. **Admin Dashboard & Flight Landing Simulator**:
-   - Navigate to `/admin`.
-   - View live KPI cards: **Match Rate (75.8%+)**, **Fill Rate**, **Avg Detour**, **Total Fares Collected**.
-   - Under the simulation panel, select **AI-865** or **UK-993** and click **Land Flight & Match Pools**.
-   - Watch newly formed pools appear instantly in the active pools table.
-
----
-
-## 🐳 Docker & Cloud Deployment
-
-FlightPool includes a production multi-stage [Dockerfile](file:///C:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/Dockerfile) based on Node 20 Alpine with Next.js standalone output and pre-seeded SQLite database.
-
-### 1. Run with Docker Compose
-```bash
-# Build and run container in background
-docker compose up --build -d
-
-# Check running container
-docker ps
-```
-The app will be live at `http://localhost:3000`.
-
-### 2. Deploy to Vercel / Render / Railway / Cloud Run
-- **Vercel**: Deployed at `https://flight-pool-red.vercel.app/` with automatic Prisma client generation and serverless `/tmp` SQLite persistence fallback.
-- **Render**: Connect your GitHub repository and select **Web Service (Docker)** or use the included [render.yaml](file:///C:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/render.yaml).
-- **Railway**: Run `railway up` — Railway automatically detects the `Dockerfile`.
-- **Google Cloud Run**: Run `gcloud run deploy flightpool --source . --port 3000 --allow-unauthenticated`.
