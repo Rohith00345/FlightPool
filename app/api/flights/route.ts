@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
           search
             ? {
                 OR: [
-                  { flightNumber: { contains: search } },
-                  { airline: { contains: search } },
-                  { origin: { contains: search } },
+                  { flightNumber: { contains: search, mode: "insensitive" } },
+                  { airline: { contains: search, mode: "insensitive" } },
+                  { origin: { contains: search, mode: "insensitive" } },
                 ],
               }
             : {},

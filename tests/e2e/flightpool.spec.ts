@@ -13,7 +13,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
       },
     });
     expect(authRes.ok()).toBeTruthy();
-    const { user: user1 } = await authRes.json();
+    const { user: user1, token: token1 } = await authRes.json();
 
     // Fetch flight 6E-204
     const flightsRes = await request.get("/api/flights?search=6E-204");
@@ -23,6 +23,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
     // Verify Boarding Pass
     const verifyRes = await request.post("/api/verification", {
+      headers: { Authorization: `Bearer ${token1}` },
       data: {
         userId: user1.id,
         flightId: flight.id,
@@ -34,6 +35,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
     // Ride Request: Aarav to Thane
     const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token1}` },
       data: {
         userId: user1.id,
         flightId: flight.id,
@@ -48,12 +50,15 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
     // Trigger matching engine
     const matchRes = await request.post("/api/pools/match", {
+      headers: { Authorization: `Bearer ${token1}` },
       data: { flightId: flight.id },
     });
     expect(matchRes.ok()).toBeTruthy();
 
     // Check status
-    const statusRes = await request.get(`/api/rides/status?userId=${user1.id}`);
+    const statusRes = await request.get(`/api/rides/status?userId=${user1.id}`, {
+      headers: { Authorization: `Bearer ${token1}` },
+    });
     const statusData = await statusRes.json();
     expect(statusData.activeRequest).toBeDefined();
 
@@ -62,6 +67,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
       // Confirm pool and authorize payment
       const confirmRes = await request.post("/api/pools/confirm", {
+        headers: { Authorization: `Bearer ${token1}` },
         data: {
           poolId,
           userId: user1.id,
@@ -96,6 +102,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
         // Submit rating
         const rateRes = await request.post(`/api/trips/${tripId}/rate`, {
+          headers: { Authorization: `Bearer ${token1}` },
           data: {
             raterUserId: user1.id,
             score: 5,
@@ -119,13 +126,14 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
         gender: "MALE",
       },
     });
-    const { user } = await authRes.json();
+    const { user, token } = await authRes.json();
 
     const flightsRes = await request.get("/api/flights");
     const { flights } = await flightsRes.json();
     const flight = flights[0];
 
     const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token}` },
       data: {
         userId: user.id,
         flightId: flight.id,
@@ -140,6 +148,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
 
     // Trigger Solo action
     const soloRes = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${token}` },
       data: {
         userId: user.id,
         rideRequestId: rideRequest.id,
@@ -159,17 +168,18 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     const authRes1 = await request.post("/api/auth/otp", {
       data: { identifier: "+919800000001", otp: "123456", name: "Rider Alpha" },
     });
-    const { user: user1 } = await authRes1.json();
+    const { user: user1, token: token1 } = await authRes1.json();
 
     const authRes2 = await request.post("/api/auth/otp", {
       data: { identifier: "+919800000002", otp: "123456", name: "Rider Beta" },
     });
-    const { user: user2 } = await authRes2.json();
+    const { user: user2, token: token2 } = await authRes2.json();
 
     const flightsRes = await request.get("/api/flights");
     const flight = (await flightsRes.json()).flights[0];
 
     await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token1}` },
       data: {
         userId: user1.id,
         flightId: flight.id,
@@ -180,6 +190,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     });
 
     await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token2}` },
       data: {
         userId: user2.id,
         flightId: flight.id,
@@ -190,14 +201,20 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     });
 
     // Run matching
-    await request.post("/api/pools/match", { data: { flightId: flight.id } });
+    await request.post("/api/pools/match", {
+      headers: { Authorization: `Bearer ${token1}` },
+      data: { flightId: flight.id },
+    });
 
-    const statusRes = await request.get(`/api/rides/status?userId=${user1.id}`);
+    const statusRes = await request.get(`/api/rides/status?userId=${user1.id}`, {
+      headers: { Authorization: `Bearer ${token1}` },
+    });
     const { pool } = await statusRes.json();
 
     if (pool) {
       // Rider 1 leaves the pool
       const leaveRes = await request.post("/api/pools/leave", {
+        headers: { Authorization: `Bearer ${token1}` },
         data: {
           poolId: pool.id,
           userId: user1.id,
@@ -208,7 +225,9 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
       expect(leaveData.success).toBe(true);
 
       // Verify Rider 1 is back to searching
-      const statusAfter = await request.get(`/api/rides/status?userId=${user1.id}`);
+      const statusAfter = await request.get(`/api/rides/status?userId=${user1.id}`, {
+        headers: { Authorization: `Bearer ${token1}` },
+      });
       const afterData = await statusAfter.json();
       expect(afterData.activeRequest.status).toBe("SEARCHING");
     }
@@ -219,16 +238,17 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     const auth1 = await request.post("/api/auth/otp", {
       data: { identifier: "+919811111101", otp: "123456", name: "Sneha D", gender: "FEMALE" },
     });
-    const { user: female1 } = await auth1.json();
+    const { user: female1, token: token1 } = await auth1.json();
 
     const auth2 = await request.post("/api/auth/otp", {
       data: { identifier: "+919811111102", otp: "123456", name: "Ananya J", gender: "FEMALE" },
     });
-    const { user: female2 } = await auth2.json();
+    const { user: female2, token: token2 } = await auth2.json();
 
     const flight = (await (await request.get("/api/flights")).json()).flights[0];
 
     await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token1}` },
       data: {
         userId: female1.id,
         flightId: flight.id,
@@ -240,6 +260,7 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     });
 
     await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${token2}` },
       data: {
         userId: female2.id,
         flightId: flight.id,
@@ -250,9 +271,14 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
       },
     });
 
-    await request.post("/api/pools/match", { data: { flightId: flight.id } });
+    await request.post("/api/pools/match", {
+      headers: { Authorization: `Bearer ${token1}` },
+      data: { flightId: flight.id },
+    });
 
-    const status1 = await (await request.get(`/api/rides/status?userId=${female1.id}`)).json();
+    const status1 = await (await request.get(`/api/rides/status?userId=${female1.id}`, {
+      headers: { Authorization: `Bearer ${token1}` },
+    })).json();
     if (status1.pool) {
       // Ensure all members are female
       for (const m of status1.pool.members) {
