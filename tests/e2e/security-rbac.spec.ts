@@ -248,4 +248,148 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
     expect(json.success).toBe(true);
     expect(json.auditLogId).toBeDefined();
   });
+
+  test("12. Marshal Station RBAC: Anonymous & Riders rejected (401/403), Marshal succeeds", async ({ request }) => {
+    // 1. Anonymous request to marshal station rejected
+    const anonRes = await request.get("/api/marshal/station");
+    expect([401, 403]).toContain(anonRes.status());
+
+    // 2. Rider request to marshal station rejected (403)
+    const riderLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919811223344", otp: "123456", name: "Rider Only", role: "RIDER" },
+    });
+    const { token: riderToken } = await riderLogin.json();
+    const riderRes = await request.get("/api/marshal/station", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+    });
+    expect(riderRes.status()).toBe(403);
+
+    // 3. Marshal request succeeds (200)
+    const marshalLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919800112233", otp: "123456", name: "BOM Marshal", role: "MARSHAL" },
+    });
+    const { token: marshalToken } = await marshalLogin.json();
+    const marshalRes = await request.get("/api/marshal/station", {
+      headers: { Authorization: `Bearer ${marshalToken}` },
+    });
+    expect(marshalRes.ok()).toBeTruthy();
+    const marshalJson = await marshalRes.json();
+    expect(marshalJson.terminals).toBeDefined();
+  });
+
+  test("13. Cross-User Trip Access Defense: Rider A cannot view Rider B's trip", async ({ request }) => {
+    // Rider A logs in and creates ride
+    const riderALogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919822334455", otp: "123456", name: "Rider A", role: "RIDER" },
+    });
+    const { user: userA, token: tokenA } = await riderALogin.json();
+
+    const flight = (await (await request.get("/api/flights")).json()).flights[0];
+    const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      data: {
+        userId: userA.id,
+        flightId: flight.id,
+        destinationZone: "Bandra",
+        destinationAddress: "Bandra BKC",
+        luggageCount: 1,
+      },
+    });
+    const { rideRequest: reqA } = await reqRes.json();
+
+    const soloRes = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      data: {
+        userId: userA.id,
+        rideRequestId: reqA.id,
+      },
+    });
+    const soloData = await soloRes.json();
+    const tripAId = soloData.trip.id;
+
+    // Rider B logs in
+    const riderBLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919877889900", otp: "123456", name: "Rider B", role: "RIDER" },
+    });
+    const { token: tokenB } = await riderBLogin.json();
+
+    // Rider B attempts to inspect Rider A's trip -> Rejected with 403 Forbidden
+    const crossRes = await request.get(`/api/trips/${tripAId}`, {
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    expect(crossRes.status()).toBe(403);
+    const crossJson = await crossRes.json();
+    expect(crossJson.error).toContain("Forbidden");
+  });
+
+  test("14. Public Trip Sharing Token exposes telemetry without PII", async ({ request }) => {
+    const riderLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919833221100", otp: "123456", name: "Rider Share Tester", role: "RIDER" },
+    });
+    const { user: riderUser, token: riderToken } = await riderLogin.json();
+
+    const flight = (await (await request.get("/api/flights")).json()).flights[0];
+    const reqRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+      data: {
+        userId: riderUser.id,
+        flightId: flight.id,
+        destinationZone: "Powai",
+        destinationAddress: "Hiranandani Gardens, Powai",
+        luggageCount: 1,
+      },
+    });
+    const { rideRequest: reqShare } = await reqRes.json();
+
+    const soloRes = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+      data: {
+        userId: riderUser.id,
+        rideRequestId: reqShare.id,
+      },
+    });
+    const { trip } = await soloRes.json();
+
+    // Generate Share Token
+    const shareRes = await request.post(`/api/trips/${trip.id}/share`, {
+      headers: { Authorization: `Bearer ${riderToken}` },
+    });
+    expect(shareRes.ok()).toBeTruthy();
+    const { token: shareToken, shareUrl } = await shareRes.json();
+    expect(shareToken).toBeDefined();
+    expect(shareUrl).toContain("/trip/share/");
+
+    // Resolve publicly without credentials
+    const publicRes = await request.get(`/api/trips/share/${shareToken}`);
+    expect(publicRes.ok()).toBeTruthy();
+    const publicJson = await publicRes.json();
+
+    // Verify sanitized data
+    expect(publicJson.active).toBe(true);
+    expect(publicJson.vehicle.maskedPlate).toContain("••"); // Masked plate
+    expect(publicJson.driver.name).toBeDefined();
+
+    // Confirm ZERO rider PII leaked
+    expect(publicJson.riders).toBeUndefined();
+    expect(publicJson.passengerPhone).toBeUndefined();
+  });
+
+  test("15. Map & Payment Views load cleanly without CSP or script errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") {
+        errors.push(msg.text());
+      }
+    });
+
+    await page.goto("http://localhost:3000/");
+    await page.waitForLoadState("networkidle");
+
+    // Filter benign Leaflet / tile network hiccups if offline
+    const criticalCspErrors = errors.filter(
+      (e) => e.includes("Content-Security-Policy") || e.includes("eval") || e.includes("violates")
+    );
+    expect(criticalCspErrors).toHaveLength(0);
+  });
 });

@@ -27,6 +27,7 @@ model User {
   ratingsReceived Rating[]              @relation("UserRatingsReceived")
   incidents     Incident[]
   consents      Consent[]
+  fareQuotes    FareQuote[]
 }
 
 model Flight {
@@ -77,6 +78,7 @@ model RideRequest {
   user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   flight             Flight       @relation(fields: [flightId], references: [id], onDelete: Cascade)
   poolMembers        PoolMember[]
+  fareQuotes         FareQuote[]
 }
 
 model Pool {
@@ -149,9 +151,10 @@ model Driver {
   vehicleId   String?
   createdAt   DateTime @default(now())
 
-  vehicle     Vehicle? @relation(fields: [vehicleId], references: [id])
+  vehicle     Vehicle?         @relation(fields: [vehicleId], references: [id])
   pools       Pool[]
   trips       Trip[]
+  documents   DriverDocument[]
 }
 
 model Trip {
@@ -177,6 +180,7 @@ model Trip {
   payments         Payment[]
   ratings          Rating[]
   incidents        Incident[]
+  shareTokens      ShareTripToken[]
 }
 
 model Payment {
@@ -402,3 +406,55 @@ model OtpRequest {
 
   @@index([phone, createdAt])
 }
+
+model FareQuote {
+  id              String       @id @default(cuid())
+  userId          String
+  rideRequestId   String?
+  airportId       String?
+  destinationZone String
+  soloFarePaise   Int
+  poolFarePaise   Int
+  minSavingPct    Float        @default(30.0)
+  surgeMultiplier Float        @default(1.0)
+  currency        String       @default("INR")
+  status          String       @default("ACTIVE") // ACTIVE, ACCEPTED, EXPIRED, SUPERSEDED
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rideRequest     RideRequest? @relation(fields: [rideRequestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([rideRequestId])
+}
+
+model ShareTripToken {
+  id        String   @id @default(cuid())
+  tripId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+model DriverDocument {
+  id          String    @id @default(cuid())
+  driverId    String
+  docType     String    // "DRIVING_LICENSE", "AADHAAR", "POLICE_VERIFICATION", "VEHICLE_RC"
+  docNumber   String
+  fileUrl     String
+  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  driver      Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([driverId, docType])
+}
+

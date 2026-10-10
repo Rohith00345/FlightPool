@@ -55,6 +55,20 @@ export async function POST(
       },
     });
 
+    if (trip.driverId) {
+      const driverRatings = await prisma.rating.findMany({
+        where: { trip: { driverId: trip.driverId } },
+        select: { score: true },
+      });
+      if (driverRatings.length > 0) {
+        const avg = driverRatings.reduce((sum, r) => sum + r.score, 0) / driverRatings.length;
+        await prisma.driver.update({
+          where: { id: trip.driverId },
+          data: { rating: Math.round(avg * 10) / 10 },
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       rating: {

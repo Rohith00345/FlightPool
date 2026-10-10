@@ -143,6 +143,8 @@ async function main() {
   if (isDemo) {
     console.log("DEMO_MODE active: Cleaning old demo records and OTP requests...");
     await prisma.otpRequest.deleteMany();
+    await prisma.fareQuote.deleteMany();
+    await prisma.shareTripToken.deleteMany();
     await prisma.incident.deleteMany();
     await prisma.rating.deleteMany();
     await prisma.payment.deleteMany();
@@ -151,6 +153,7 @@ async function main() {
     await prisma.pool.deleteMany();
     await prisma.rideRequest.deleteMany();
     await prisma.passengerVerification.deleteMany();
+    await prisma.driverDocument.deleteMany();
     await prisma.driver.deleteMany();
     await prisma.vehicle.deleteMany();
     await prisma.flight.deleteMany();
