@@ -23,7 +23,21 @@ if (branch !== "mega-upgrade") {
   process.exit(1);
 }
 
-console.log("\n✅ Ready for user-initiated shipping / deployment.");
-console.log("Note: As specified in safety rules, automated push/merge is disabled.");
-console.log("The user will execute deployment steps manually.");
-process.exit(0);
+// 3. Check for uncommitted changes
+const status = execSync("git status --porcelain", { encoding: "utf8" }).trim();
+if (status) {
+  console.warn("⚠️ Warning: uncommitted changes detected in working tree.");
+}
+
+// 4. Push branch to GitHub
+const shipMsg = process.argv[2] || "Ship mega-upgrade";
+console.log(`\nPushing branch '${branch}' to origin on GitHub ("${shipMsg}")...`);
+try {
+  execSync(`git push -u origin ${branch}`, { stdio: "inherit" });
+  console.log(`\n🎉 Successfully pushed branch '${branch}' to GitHub!`);
+  console.log("Vercel preview build will trigger automatically.");
+  process.exit(0);
+} catch (e) {
+  console.error("\n❌ Failed to push to GitHub:", e.message);
+  process.exit(1);
+}

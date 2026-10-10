@@ -36,22 +36,38 @@ The following Prisma migrations were authored during this upgrade cycle. Each mi
 ---
 
 ## 4. Exact Execution Order (Production Rollout)
-*Do NOT merge to `main` until Steps 1 and 2 are complete.*
+*Follow this exact sequence. Do NOT merge to `main` until Steps 1 and 2 are complete.*
 
 1. **Step 1: Execute Database Migrations against Neon**
-   ```bash
-   node scripts/migrate-live.mjs
-   ```
-   *Validates connection string, confirms target is Neon, and runs `prisma migrate deploy`.*
+   - Open a **NEW Command Prompt** window (do not reuse the development window).
+   - `cd` into the FlightPool repository folder.
+   - Set the direct Neon database connection string:
+     ```cmd
+     set "DATABASE_URL=your direct Neon string"
+     ```
+   - Run the live migration script:
+     ```cmd
+     node scripts\migrate-live.mjs
+     ```
+   - When prompted, type `MIGRATE LIVE` to confirm deployment.
+   - Once migrations complete, close the Command Prompt window.
 
-2. **Step 2: Add New Vercel Environment Variables**
-   - Go to Vercel Project Settings &rarr; **Environment Variables**.
-   - Ensure `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_PHONES`, and `DATABASE_URL` are set for both Preview and Production.
-   - Confirm `DEMO_MODE` is left empty or `"false"` in Production.
+2. **Step 2: Add / Verify Vercel Environment Variables**
+   - Go to Vercel Dashboard &rarr; Project &rarr; **Settings** &rarr; **Environment Variables**.
+   - Verify every variable in Section 2 is configured. If Preview variables are missing, tick **Preview** for each variable in Vercel settings.
+   - Ensure `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_PHONES`, and `DATABASE_URL` are present for both Preview and Production.
+   - Keep `DEMO_MODE` empty or `"false"` in Production.
 
-3. **Step 3: Merge to `main`**
-   - Review and merge pull request from branch `mega-upgrade` to `main`.
-   - Vercel will trigger a zero-downtime production deployment.
+3. **Step 3: Merge to `main` on GitHub**
+   - Open GitHub &rarr; Create a Pull Request from `mega-upgrade` into `main`.
+   - Verify CI checks pass, then **Merge Pull Request**.
+   - Vercel will trigger the live production deployment automatically.
+
+4. **Rollback Plan (Emergency Contingency)**:
+   - If the live site breaks after deployment:
+   - Go to Vercel Dashboard &rarr; **Deployments**.
+   - Locate the last known good deployment.
+   - Click the three dots (`...`) &rarr; **Promote to Production**.
 
 ---
 
