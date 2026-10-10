@@ -7,7 +7,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const roleCheck = requireRole(req, ["ADMIN", "MARSHAL"]);
+    const roleCheck = requireRole(req, ["ADMIN", "MARSHAL", "SUPPORT"]);
     if (roleCheck.response) return roleCheck.response;
 
     const { id } = await params;

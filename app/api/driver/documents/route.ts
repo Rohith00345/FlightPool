@@ -9,6 +9,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    if (session.role !== "DRIVER" && session.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden: Driver role required" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { docType, docNumber, fileUrl } = body;
 
@@ -78,6 +82,10 @@ export async function GET(req: NextRequest) {
     const session = getSessionFromRequest(req);
     if (!session) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "DRIVER" && session.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden: Driver role required" }, { status: 403 });
     }
 
     const driver = await prisma.driver.findFirst({

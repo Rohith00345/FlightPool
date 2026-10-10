@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest } from "@/lib/auth";
+import { processWaitCapExpiries } from "@/lib/pool-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export async function GET(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // Lazily evaluate wait-cap expiry on every ride/pool status read (works without cron)
+    await processWaitCapExpiries(new Date());
 
     // Find the latest active ride request for this user
     const rideRequest = await prisma.rideRequest.findFirst({

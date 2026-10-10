@@ -40,6 +40,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (request.status === "COMPLETED" || request.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: `Cannot trigger solo fallback from terminal status '${request.status}'` },
+        { status: 400 }
+      );
+    }
+
     if (action === "KEEP_WAITING") {
       // Extend wait time by setting readyTime to now
       await prisma.rideRequest.update({

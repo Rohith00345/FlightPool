@@ -50,13 +50,16 @@ export async function recordFarePaymentLedger(params: {
   userId: string;
   driverId: string;
   totalFarePaise: number;
+  convenienceFeePaise?: number;
   commissionPct?: number;
 }): Promise<LedgerPostingResult> {
   const txnId = `tx_fare_${params.paymentId}_${crypto.randomBytes(4).toString("hex")}`;
   const commissionRate = (params.commissionPct ?? 15.0) / 100;
+  const convenienceFeePaise = params.convenienceFeePaise ?? 0;
 
   const platformFeePaise = Math.round(params.totalFarePaise * commissionRate);
   const driverPayoutPaise = params.totalFarePaise - platformFeePaise;
+  const totalCashCollectedPaise = params.totalFarePaise + convenienceFeePaise;
 
   return await prisma.$transaction(async (tx) => {
     // 1. Resolve Accounts
@@ -124,13 +127,13 @@ export async function recordFarePaymentLedger(params: {
     }
 
     // 2. Post Entries
-    // DEBIT: Platform Cash (Asset +)
+    // DEBIT: Platform Cash (Asset +) - fare + rider convenience fee
     await tx.ledgerEntry.create({
       data: {
         txnId,
         accountId: cashAccount.id,
         direction: "DEBIT",
-        amountPaise: params.totalFarePaise,
+        amountPaise: totalCashCollectedPaise,
         refType: "PAYMENT",
         refId: params.paymentId,
       },
@@ -148,6 +151,20 @@ export async function recordFarePaymentLedger(params: {
       },
     });
 
+    // CREDIT: Platform Convenience Fee (Revenue +) if applicable
+    if (convenienceFeePaise > 0) {
+      await tx.ledgerEntry.create({
+        data: {
+          txnId,
+          accountId: commissionAccount.id,
+          direction: "CREDIT",
+          amountPaise: convenienceFeePaise,
+          refType: "PAYMENT",
+          refId: params.paymentId,
+        },
+      });
+    }
+
     // CREDIT: Driver Payable (Liability +)
     await tx.ledgerEntry.create({
       data: {
@@ -160,12 +177,12 @@ export async function recordFarePaymentLedger(params: {
       },
     });
 
-    const debits = params.totalFarePaise;
-    const credits = platformFeePaise + driverPayoutPaise;
+    const debits = totalCashCollectedPaise;
+    const credits = platformFeePaise + convenienceFeePaise + driverPayoutPaise;
 
     return {
       txnId,
-      entriesCount: 3,
+      entriesCount: convenienceFeePaise > 0 ? 4 : 3,
       totalDebitedPaise: debits,
       totalCreditedPaise: credits,
       isBalanced: debits === credits,
@@ -182,13 +199,16 @@ export async function recordRefundLedger(params: {
   refundId: string;
   driverId: string;
   refundPaise: number;
+  convenienceFeeReversalPaise?: number;
   commissionPct?: number;
 }): Promise<LedgerPostingResult> {
   const txnId = `tx_refund_${params.refundId}_${crypto.randomBytes(4).toString("hex")}`;
   const commissionRate = (params.commissionPct ?? 15.0) / 100;
+  const convenienceFeeReversalPaise = params.convenienceFeeReversalPaise ?? 0;
 
   const platformFeePaise = Math.round(params.refundPaise * commissionRate);
   const driverPayoutPaise = params.refundPaise - platformFeePaise;
+  const totalCashReturnedPaise = params.refundPaise + convenienceFeeReversalPaise;
 
   return await prisma.$transaction(async (tx) => {
     let cashAccount = await tx.ledgerAccount.findUnique({
@@ -251,13 +271,13 @@ export async function recordRefundLedger(params: {
       });
     }
 
-    // CREDIT: Platform Cash (Asset -)
+    // CREDIT: Platform Cash (Asset -) - refund amount + convenience fee reversal
     await tx.ledgerEntry.create({
       data: {
         txnId,
         accountId: cashAccount.id,
         direction: "CREDIT",
-        amountPaise: params.refundPaise,
+        amountPaise: totalCashReturnedPaise,
         refType: "REFUND",
         refId: params.refundId,
       },
@@ -275,6 +295,20 @@ export async function recordRefundLedger(params: {
       },
     });
 
+    // DEBIT: Platform Convenience Fee (Revenue -) if applicable
+    if (convenienceFeeReversalPaise > 0) {
+      await tx.ledgerEntry.create({
+        data: {
+          txnId,
+          accountId: commissionAccount.id,
+          direction: "DEBIT",
+          amountPaise: convenienceFeeReversalPaise,
+          refType: "REFUND",
+          refId: params.refundId,
+        },
+      });
+    }
+
     // DEBIT: Driver Payable (Liability -)
     await tx.ledgerEntry.create({
       data: {
@@ -287,12 +321,12 @@ export async function recordRefundLedger(params: {
       },
     });
 
-    const debits = platformFeePaise + driverPayoutPaise;
-    const credits = params.refundPaise;
+    const debits = platformFeePaise + convenienceFeeReversalPaise + driverPayoutPaise;
+    const credits = totalCashReturnedPaise;
 
     return {
       txnId,
-      entriesCount: 3,
+      entriesCount: convenienceFeeReversalPaise > 0 ? 4 : 3,
       totalDebitedPaise: debits,
       totalCreditedPaise: credits,
       isBalanced: debits === credits,
@@ -356,3 +390,151 @@ export async function verifyTransactionBalance(txnId: string): Promise<boolean> 
 
   return debits === credits;
 }
+
+/**
+ * Executes the weekly driver payout batch job.
+ * Creates payout records and posts balancing double-entry ledger transfers:
+ * DEBIT: Driver Payable (Liability decreases)
+ * CREDIT: Platform Cash (Asset decreases)
+ * Invariant: Sum of DEBITS strictly equals Sum of CREDITS.
+ */
+export async function processWeeklyDriverPayouts(params: {
+  periodStart: Date;
+  periodEnd: Date;
+  driverId?: string;
+}): Promise<{
+  payoutsProcessed: number;
+  totalPaidOutPaise: number;
+  postingResults: LedgerPostingResult[];
+}> {
+  const drivers = await prisma.driver.findMany({
+    where: params.driverId ? { id: params.driverId } : {},
+  });
+
+  const postingResults: LedgerPostingResult[] = [];
+  let totalPaidOutPaise = 0;
+  let payoutsProcessed = 0;
+
+  for (const driver of drivers) {
+    const payableBalance = await getAccountBalancePaise("driver", driver.id, "payable");
+    if (payableBalance <= 0) continue;
+
+    const netPaise = payableBalance;
+    const txnId = `tx_payout_${driver.id}_${crypto.randomBytes(4).toString("hex")}`;
+
+    const posting = await prisma.$transaction(async (tx) => {
+      // 1. Resolve Accounts
+      let cashAccount = await tx.ledgerAccount.findUnique({
+        where: {
+          ownerType_ownerId_accountType: {
+            ownerType: "platform",
+            ownerId: "platform",
+            accountType: "cash",
+          },
+        },
+      });
+      if (!cashAccount) {
+        cashAccount = await tx.ledgerAccount.create({
+          data: {
+            ownerType: "platform",
+            ownerId: "platform",
+            accountType: "cash",
+            currency: "INR",
+          },
+        });
+      }
+
+      let driverPayableAccount = await tx.ledgerAccount.findUnique({
+        where: {
+          ownerType_ownerId_accountType: {
+            ownerType: "driver",
+            ownerId: driver.id,
+            accountType: "payable",
+          },
+        },
+      });
+      if (!driverPayableAccount) {
+        driverPayableAccount = await tx.ledgerAccount.create({
+          data: {
+            ownerType: "driver",
+            ownerId: driver.id,
+            accountType: "payable",
+            currency: "INR",
+          },
+        });
+      }
+
+      // 2. Post balancing entries
+      // DEBIT: Driver Payable (Liability decreases)
+      await tx.ledgerEntry.create({
+        data: {
+          txnId,
+          accountId: driverPayableAccount.id,
+          direction: "DEBIT",
+          amountPaise: netPaise,
+          refType: "PAYOUT",
+          refId: driver.id,
+        },
+      });
+
+      // CREDIT: Platform Cash (Asset decreases)
+      await tx.ledgerEntry.create({
+        data: {
+          txnId,
+          accountId: cashAccount.id,
+          direction: "CREDIT",
+          amountPaise: netPaise,
+          refType: "PAYOUT",
+          refId: driver.id,
+        },
+      });
+
+      // 3. Upsert Payout record
+      await tx.payout.upsert({
+        where: {
+          driverId_periodStart_periodEnd: {
+            driverId: driver.id,
+            periodStart: params.periodStart,
+            periodEnd: params.periodEnd,
+          },
+        },
+        update: {
+          grossPaise: netPaise,
+          commissionPaise: 0,
+          netPaise,
+          status: "PAID",
+          paidAt: new Date(),
+        },
+        create: {
+          driverId: driver.id,
+          periodStart: params.periodStart,
+          periodEnd: params.periodEnd,
+          grossPaise: netPaise,
+          commissionPaise: 0,
+          netPaise,
+          status: "PAID",
+          paidAt: new Date(),
+        },
+      });
+
+      return {
+        txnId,
+        entriesCount: 2,
+        totalDebitedPaise: netPaise,
+        totalCreditedPaise: netPaise,
+        isBalanced: true,
+      };
+    });
+
+    postingResults.push(posting);
+    totalPaidOutPaise += netPaise;
+    payoutsProcessed++;
+  }
+
+  return {
+    payoutsProcessed,
+    totalPaidOutPaise,
+    postingResults,
+  };
+}
+

@@ -10,16 +10,16 @@ export async function POST(req: NextRequest) {
 
     if (!signature) {
       return NextResponse.json(
-        { error: "Missing x-razorpay-signature header" },
-        { status: 400 }
+        { error: "Unauthorized: Missing x-razorpay-signature header" },
+        { status: 401 }
       );
     }
 
     const isValid = verifyRazorpayWebhookSignature(rawBody, signature);
     if (!isValid) {
       return NextResponse.json(
-        { error: "Invalid webhook signature" },
-        { status: 400 }
+        { error: "Unauthorized: Invalid webhook signature" },
+        { status: 401 }
       );
     }
 

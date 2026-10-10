@@ -19,6 +19,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (tripId && session.role !== "ADMIN") {
+      const trip = await prisma.trip.findUnique({
+        where: { id: tripId },
+        include: { pool: { include: { members: true } } },
+      });
+      if (trip) {
+        const isMember = trip.pool.members.some((m) => m.userId === session.userId);
+        const isDriver = trip.driverId === session.userId;
+        if (!isMember && !isDriver) {
+          return NextResponse.json(
+            { error: "Forbidden: Cannot report incident for a trip you are not part of" },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     const incidentType = type || "SOS";
     const incidentSeverity = severity || "HIGH";
 

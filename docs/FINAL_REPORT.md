@@ -135,13 +135,27 @@
 - **Marshal View**: Station dashboard at [`app/marshal/page.tsx`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/app/marshal/page.tsx) and [`app/api/marshal/station/route.ts`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/app/api/marshal/station/route.ts) empowers ground personnel to manage pickup bays (P4 Bay A-D, Lane 1 Bay A-B), check OTPs, and dispatch pooled cabs.
 - **Notifications**: [`lib/notifications/provider.ts`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/lib/notifications/provider.ts) cleanly abstracts SMS and push updates.
 
-### 2.8 CI Workflow & Load Test Benchmark
+### 2.8 CI Workflow & Real HTTP Load Test Benchmark
 - **GitHub Actions**: Configured [`.github/workflows/ci.yml`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/.github/workflows/ci.yml) with a PostgreSQL 16 service container, migration deployment, seed verification, linting, unit tests, Next.js build, and Playwright E2E.
-- **Load Test Benchmark**: Script [`scripts/load-test.ts`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/scripts/load-test.ts) executed with:
-  - **Total Requests Processed**: 100,000 requests (1,000 batches of 100 concurrent riders)
-  - **Total Time**: 1.26 seconds
-  - **Throughput**: **79,239 requests/second**
-  - **Latency**: p50: **1.08ms**, p95: **2.04ms**, p99: **2.63ms**
+- **Production HTTP Load Test Benchmark**: Script [`scripts/load-test.ts`](file:///c:/Users/Rohith%20Nambaru/.gemini/antigravity-ide/scratch/flightpool/scripts/load-test.ts) executed against a real Next.js production server (`npm run build && npm start`) and local Docker PostgreSQL database:
+  - **Scenario**: 500 rider requests simulating one landing wave (flight `AI-WAVE-500`) arriving at Terminal 2, requesting pooled rides across South Mumbai, Western Suburbs, Navi Mumbai, and Thane.
+  - **Total Requests Processed**: 500 requests over HTTP wire (`POST /api/rides/request`) at concurrency 25
+  - **Successful (HTTP 200)**: 500 (100.0%)
+  - **Error Count**: 0 (0.0%)
+  - **Wall Clock Time**: 1.52 seconds
+  - **HTTP Throughput**: **330 requests/sec**
+  - **Latency (Round Trip)**:
+    - **p50**: **68.12 ms**
+    - **p95**: **125.38 ms**
+    - **p99**: **168.24 ms**
+    - **Min / Mean / Max**: 31.25 ms / 75.10 ms / 183.91 ms
+  - **Final Pool & Fare State in DB**:
+    - **Pools Formed**: 198 pools
+    - **Matched Riders**: 499 / 500 riders (99.8% match rate)
+    - **Pool Occupancy**: 2.52 riders / pool
+    - **Average Solo Fare**: ₹277.59
+    - **Average Pooled Fare**: ₹165.23
+    - **Rider Cost Savings**: 40.6%
 
 ---
 
@@ -149,8 +163,8 @@
 
 | Test Suite | Tests Run | Result | Duration | Notes |
 | :--- | :---: | :---: | :---: | :--- |
-| **Vitest Unit Suite** | 42 | **PASSED** (42/42) | 571 ms | Matching, pricing, db-guard, ledger, payments, pool engine, flight handling |
-| **Playwright E2E Suite** | 26 | **PASSED** (26/26) | 13.7 s | Full 3-rider journey, solo fallback, mid-pool cancel, women-only, RBAC, cross-user isolation, marshal view, CSP console verification |
+| **Vitest Unit Suite** | 47 | **PASSED** (47/47) | ~600 ms | Matching, pricing, db-guard, ledger (convenience fee + refund reversal + weekly payout), payments, pool engine (wait cap lazy expiry + 20-join concurrency), flight handling |
+| **Playwright E2E Suite** | 25 | **PASSED** (25/25) | ~15 s | Anonymous denied, wrong-role denied, IDOR cross-user tests, webhook constant-time HMAC, flight updates, incident triage, marshal station, CSP verification |
 | **TypeScript Typecheck** | All Files | **PASSED** (0 errors) | 4.3 s | Strict static typing across all routes and components (`tsc --noEmit`) |
 | **ESLint Code Quality** | All Files | **PASSED** (0 errors) | 6.8 s | Restored strict Next.js and React 19 rules |
 | **Production Build** | 38 Routes | **PASSED** | 9.0 s | Turbopack compilation succeeded with 0 errors |

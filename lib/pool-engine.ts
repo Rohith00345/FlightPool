@@ -192,6 +192,31 @@ export async function addRiderToPoolWithLock(
 }
 
 /**
+ * Attempts to join a pool with automatic optimistic locking retry and backoff.
+ * Throws CapacityExceededError if vehicle capacity is reached.
+ */
+export async function joinPoolWithRetry(
+  poolId: string,
+  riderRequest: RideRequest,
+  fareQuotePaise: { solo: number; pool: number; savingsPct: number; detourMin: number },
+  maxRetries = 25
+): Promise<{ pool: Pool; member: PoolMember }> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const current = await prisma.pool.findUniqueOrThrow({ where: { id: poolId } });
+    try {
+      return await addRiderToPoolWithLock(poolId, current.version, riderRequest, fareQuotePaise);
+    } catch (err) {
+      if (err instanceof OptimisticLockError) {
+        await new Promise((r) => setTimeout(r, 10 + Math.random() * 30));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`Exceeded max retries joining pool ${poolId}`);
+}
+
+/**
  * Creates a binding FareQuote record with 15-minute lock-in
  */
 export async function createBindingFareQuote(params: {

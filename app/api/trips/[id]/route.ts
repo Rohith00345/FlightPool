@@ -39,7 +39,11 @@ export async function GET(
     }
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN") {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "ADMIN") {
       const isRiderInTrip = trip.pool.members.some((m) => m.userId === session.userId);
       const isAssignedDriver = trip.driverId === session.userId || trip.driver.phone === session.phone;
       if (!isRiderInTrip && !isAssignedDriver) {
@@ -132,7 +136,11 @@ export async function PATCH(
     }
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN") {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "ADMIN") {
       const isAssignedDriver = trip.driverId === session.userId || trip.driver.phone === session.phone;
       if (!isAssignedDriver) {
         return NextResponse.json(

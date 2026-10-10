@@ -12,7 +12,11 @@ export async function POST(
     const { userId, description, currentLat, currentLng } = body;
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN" && userId && session.userId !== userId) {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "ADMIN" && userId && session.userId !== userId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot trigger emergency SOS for another user" },
         { status: 403 }

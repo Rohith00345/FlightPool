@@ -47,3 +47,8 @@ next-env.d.ts
 *.db-journal
 prisma/dev.db
 
+# logs and reports
+*.log
+playwright-report/
+blob-report/
+

@@ -8,8 +8,15 @@ export async function POST(req: NextRequest) {
     const cronHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
 
-    const isCronAuthorized = cronSecret && cronHeader === `Bearer ${cronSecret}`;
-    const isAdmin = session && session.role === "ADMIN";
+    const isCronAuthorized = Boolean(cronSecret && cronHeader === `Bearer ${cronSecret}`);
+    const isAdmin = Boolean(session && session.role === "ADMIN");
+
+    if (!session && !cronHeader) {
+      return NextResponse.json(
+        { error: "Authentication required", message: "Admin session or authorized service bearer required." },
+        { status: 401 }
+      );
+    }
 
     if (!isCronAuthorized && !isAdmin) {
       return NextResponse.json(

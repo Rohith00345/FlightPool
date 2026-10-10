@@ -19,7 +19,11 @@ export async function POST(
     }
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN" && session.userId !== raterUserId) {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "ADMIN" && session.userId !== raterUserId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot submit rating on behalf of another user" },
         { status: 403 }

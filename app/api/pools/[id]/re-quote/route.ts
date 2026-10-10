@@ -27,6 +27,14 @@ export async function POST(
       return NextResponse.json({ error: "Pool not found" }, { status: 404 });
     }
 
+    const isMember = pool.members.some((m) => m.userId === session.userId);
+    if (!isMember && session.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: Not a member of this pool" },
+        { status: 403 }
+      );
+    }
+
     const remainingMembers = pool.members.filter((m) => m.status !== "CANCELLED");
     const activeCount = remainingMembers.length;
 
