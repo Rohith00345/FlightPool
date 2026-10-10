@@ -31,6 +31,9 @@ interface AdminPool {
   destinationCluster: string;
   terminal: string;
   status: string;
+  displayLabel?: string;
+  isSolo?: boolean;
+  poolType?: string;
   membersCount: number;
   driverName: string;
   vehicle: string;
@@ -49,9 +52,15 @@ interface AdminData {
   metrics?: {
     matchRate: number;
     fillRate: number;
-    avgWaitMinutes: number;
+    fillRateWithoutSolo?: number;
+    soloPoolsCount?: number;
+    sharedPoolsCount?: number;
+    avgWaitMinutes: number | null;
+    avgWaitDisplay?: string;
     avgDetourMinutes: number;
     platformRevenue: number;
+    capturedRevenueCompletedTrips?: number;
+    capturedRevenueLabel?: string;
     activeIncidentsCount?: number;
   };
   flights?: AdminFlight[];
@@ -233,7 +242,9 @@ export default function AdminPage() {
               <span>Fill Rate</span>
             </div>
             <p className="text-2xl font-black text-slate-900">{metrics.fillRate}</p>
-            <p className="text-[10px] text-slate-500">Riders / vehicle average</p>
+            <p className="text-[10px] text-slate-500">
+              Without solo: {metrics.fillRateWithoutSolo !== undefined ? metrics.fillRateWithoutSolo : "-"}
+            </p>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -241,8 +252,10 @@ export default function AdminPage() {
               <Clock className="w-4 h-4 text-amber-500" />
               <span>Avg Wait Time</span>
             </div>
-            <p className="text-2xl font-black text-slate-900">{metrics.avgWaitMinutes}m</p>
-            <p className="text-[10px] text-slate-500">Cap: 20 mins max</p>
+            <p className="text-2xl font-black text-slate-900">
+              {metrics.avgWaitDisplay || (metrics.avgWaitMinutes !== null && metrics.avgWaitMinutes !== undefined ? `${metrics.avgWaitMinutes}m` : "-")}
+            </p>
+            <p className="text-[10px] text-slate-500">Last 24h matched (cap: 20m)</p>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -257,10 +270,12 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <div className="flex items-center gap-2 text-slate-500 text-xs mb-1">
               <span className="font-bold text-teal-600">₹</span>
-              <span>Platform Rev</span>
+              <span>Captured revenue (completed trips)</span>
             </div>
-            <p className="text-2xl font-black text-teal-800">₹{metrics.platformRevenue}</p>
-            <p className="text-[10px] text-slate-500">15% commission share</p>
+            <p className="text-2xl font-black text-teal-800">
+              ₹{metrics.capturedRevenueCompletedTrips ?? metrics.platformRevenue}
+            </p>
+            <p className="text-[10px] text-slate-500">15% on completed trips</p>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -342,10 +357,16 @@ export default function AdminPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900">{pool.destinationCluster} Cluster</span>
-                    <span className="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-semibold">
-                      T{pool.terminal}
+                    <span className="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-semibold">
+                      {pool.terminal === "T1" || pool.terminal === "T2" ? pool.terminal : "T2"}
                     </span>
-                    <span className="text-[10px] text-slate-500">{pool.status}</span>
+                    {pool.displayLabel === "Solo" || (pool.membersCount === 1 && pool.status === "CONFIRMED") ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold">
+                        Solo
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500">{pool.status}</span>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     Riders: {pool.membersCount} • Driver: {pool.driverName} ({pool.vehicle})

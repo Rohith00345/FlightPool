@@ -71,6 +71,7 @@ model RideRequest {
   luggageCount       Int          @default(1)
   womenOnly          Boolean      @default(false)
   readyTime          DateTime?
+  readyAt            DateTime?
   autoSoloConsent    Boolean      @default(false)
   status             String       @default("SEARCHING") // SEARCHING, POOLING, CONFIRMED, SOLO, CANCELLED, COMPLETED, WAIT_CAP_EXPIRED
   createdAt          DateTime     @default(now())
@@ -90,6 +91,7 @@ model Pool {
   status             String       @default("FORMING") // FORMING, CONFIRMED, COMPLETED, CANCELLED
   maxDetourMinutes   Int          @default(20)
   waitCapExpiry      DateTime?
+  confirmedAt        DateTime?
   vehicleId          String?
   driverId           String?
   version            Int          @default(1)

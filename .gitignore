@@ -24,6 +24,7 @@ test-results/
 # misc
 .DS_Store
 *.pem
+*.zip
 
 # debug
 npm-debug.log*
