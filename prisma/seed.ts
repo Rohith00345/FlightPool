@@ -274,6 +274,36 @@ async function main() {
     prisma.ledgerAccount.create({ data: { ownerType: "tax", accountType: "gst" } }),
   ]);
 
+  console.log("Seeding 15 Reference Flights at Mumbai Airport (BOM)...");
+  const now = new Date();
+  const createdFlights = [];
+
+  for (const f of FLIGHTS) {
+    const arrivalTime = new Date(now.getTime() - f.minutesAgo * 60 * 1000);
+    const flight = await prisma.flight.upsert({
+      where: { flightNumber: f.flightNumber },
+      update: {
+        airline: f.airline,
+        origin: f.origin,
+        destination: "BOM",
+        terminal: f.terminal,
+        status: f.status,
+        arrivalTime,
+      },
+      create: {
+        flightNumber: f.flightNumber,
+        airline: f.airline,
+        origin: f.origin,
+        destination: "BOM",
+        terminal: f.terminal,
+        status: f.status,
+        arrivalTime,
+      },
+    });
+    createdFlights.push(flight);
+  }
+  console.log(`Seeded ${createdFlights.length} flights.`);
+
   if (!isDemo) {
     console.log("Production reference data seeded successfully (Zero demo users, drivers, or pools created).");
     return;
@@ -396,28 +426,6 @@ async function main() {
       },
     }),
   ]);
-
-  console.log("Seeding 15 Flights at Mumbai Airport (BOM)...");
-  const now = new Date();
-  const createdFlights = [];
-
-  for (const f of FLIGHTS) {
-    const arrivalTime = new Date(now.getTime() - f.minutesAgo * 60 * 1000);
-    const flight = await prisma.flight.create({
-      data: {
-        flightNumber: f.flightNumber,
-        airline: f.airline,
-        origin: f.origin,
-        destination: "BOM",
-        terminal: f.terminal,
-        status: f.status,
-        arrivalTime,
-      },
-    });
-    createdFlights.push(flight);
-  }
-
-  console.log(`Created ${createdFlights.length} flights.`);
 
   console.log("Seeding 42 Passengers and verifications across Mumbai zones...");
   const primaryFlight = createdFlights[0]; // 6E-204 (DEL)

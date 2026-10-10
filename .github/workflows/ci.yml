@@ -2,7 +2,7 @@ name: FlightPool CI
 
 on:
   push:
-    branches: [ finish-upgrade, production-upgrade ]
+    branches: [ finish-upgrade, production-upgrade, mega-upgrade ]
   pull_request:
     branches: [ main ]
 
@@ -21,7 +21,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U flightpool -d flightpool"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -58,8 +58,8 @@ jobs:
       - name: Apply Database Migrations
         run: npx prisma migrate deploy
 
-      - name: Seed Reference Data
-        run: npm run db:seed
+      - name: Seed Reference & Demo Data
+        run: npm run db:seed:demo
 
       - name: Run Vitest Unit Tests
         run: npm test
