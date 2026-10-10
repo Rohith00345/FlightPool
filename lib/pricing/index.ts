@@ -201,3 +201,115 @@ export function calculatePoolPricing(
     riderShares,
   };
 }
+
+export class MoneyUnitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MoneyUnitError";
+  }
+}
+
+/**
+ * Validates that an amount represents a valid non-negative integer paise value.
+ * Throws MoneyUnitError if non-integer, negative, or non-number.
+ */
+export function assertStrictPaise(amountPaise: number, context = "value"): number {
+  if (typeof amountPaise !== "number" || isNaN(amountPaise)) {
+    throw new MoneyUnitError(`[${context}] Invalid money amount: must be a finite number`);
+  }
+  if (!Number.isInteger(amountPaise)) {
+    throw new MoneyUnitError(
+      `[${context}] Fractional paise detected (${amountPaise}). All internal money must be integer paise.`
+    );
+  }
+  if (amountPaise < 0) {
+    throw new MoneyUnitError(`[${context}] Negative money amount not permitted: ${amountPaise}`);
+  }
+  return amountPaise;
+}
+
+/**
+ * Converts rupees to integer paise.
+ */
+export function rupeesToPaise(rupees: number): number {
+  return Math.round(rupees * 100);
+}
+
+/**
+ * Converts integer paise to rupees.
+ */
+export function paiseToRupees(paise: number): number {
+  assertStrictPaise(paise, "paiseToRupees");
+  return paise / 100;
+}
+
+/**
+ * Formats integer paise into standard Indian Rupee currency string for UI presentation.
+ * This is the canonical conversion point for displaying money to users.
+ */
+export function formatPaiseToRupees(paise: number, options: { includeDecimals?: boolean } = {}): string {
+  assertStrictPaise(paise, "formatPaiseToRupees");
+  const rupees = paise / 100;
+  if (options.includeDecimals || paise % 100 !== 0) {
+    return `₹${rupees.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `₹${rupees.toLocaleString("en-IN")}`;
+}
+
+/**
+ * Computes solo fare in integer paise: basePaise + (perKmPaise * distance * multiplier)
+ */
+export function calculateSoloFarePaise(
+  distanceKm: number,
+  timeMultiplier = 1.0,
+  config: PricingConfig = DEFAULT_PRICING_CONFIG
+): number {
+  const soloRupees = calculateSoloFare(distanceKm, timeMultiplier, config);
+  return soloRupees * 100;
+}
+
+export interface PoolPricingPaiseResult {
+  totalSoloFaresPaise: number;
+  totalPoolFarePaise: number;
+  totalSavingsAmountPaise: number;
+  effectiveAverageSavingsPct: number;
+  platformFeePaise: number;
+  driverPayoutPaise: number;
+  riderShares: Array<{
+    riderId: string;
+    soloFarePaise: number;
+    poolFarePaise: number;
+    savingsAmountPaise: number;
+    savingsPct: number;
+    distanceKm: number;
+  }>;
+}
+
+/**
+ * Computes pool pricing strictly in integer paise.
+ */
+export function calculatePoolPricingPaise(
+  riders: RiderPricingInput[],
+  totalSharedRouteKm: number,
+  timeMultiplier = 1.0,
+  config: PricingConfig = DEFAULT_PRICING_CONFIG
+): PoolPricingPaiseResult {
+  const rupeePricing = calculatePoolPricing(riders, totalSharedRouteKm, timeMultiplier, config);
+
+  return {
+    totalSoloFaresPaise: rupeePricing.totalSoloFares * 100,
+    totalPoolFarePaise: rupeePricing.totalPoolFare * 100,
+    totalSavingsAmountPaise: rupeePricing.totalSavingsAmount * 100,
+    effectiveAverageSavingsPct: rupeePricing.effectiveAverageSavingsPct,
+    platformFeePaise: rupeePricing.platformFee * 100,
+    driverPayoutPaise: rupeePricing.driverPayout * 100,
+    riderShares: rupeePricing.riderShares.map((s) => ({
+      riderId: s.riderId,
+      soloFarePaise: s.soloFare * 100,
+      poolFarePaise: s.poolFare * 100,
+      savingsAmountPaise: s.savingsAmount * 100,
+      savingsPct: s.savingsPct,
+      distanceKm: s.distanceKm,
+    })),
+  };
+}

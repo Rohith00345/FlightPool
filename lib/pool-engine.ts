@@ -270,8 +270,90 @@ export async function createBindingFareQuote(params: {
   };
 }
 
+const poolEvaluationCooldown = new Map<string, number>();
+
 /**
- * Evaluates wait-cap expiry on forming pools
+ * Evaluates wait-cap expiry on a specific pool (on-read evaluation scoped to caller's pool).
+ * Safe, idempotent via optimistic locking, and rate-limited per pool.
+ */
+export async function evaluatePoolWaitCap(
+  poolId: string,
+  referenceTime = new Date()
+): Promise<{
+  poolId: string;
+  transitioned: boolean;
+  newStatus?: PoolStatus;
+  autoSoloApplied?: boolean;
+}> {
+  const lastEval = poolEvaluationCooldown.get(poolId) || 0;
+  const now = referenceTime.getTime();
+  if (now - lastEval < 1500) {
+    return { poolId, transitioned: false };
+  }
+  poolEvaluationCooldown.set(poolId, now);
+
+  const pool = await prisma.pool.findUnique({
+    where: { id: poolId },
+    include: {
+      members: {
+        include: { rideRequest: true },
+      },
+    },
+  });
+
+  if (!pool || pool.status !== "FORMING" || !pool.waitCapExpiry || pool.waitCapExpiry > referenceTime) {
+    return { poolId, transitioned: false };
+  }
+
+  try {
+    if (pool.members.length >= 2) {
+      // 2 or more members: auto-confirm the pool for dispatch
+      await transitionPoolStatus(pool.id, pool.version, "CONFIRMED");
+      return { poolId, transitioned: true, newStatus: "CONFIRMED" };
+    } else {
+      // Fewer than 2 members: wait-cap expired without forming a multi-rider pool
+      await transitionPoolStatus(pool.id, pool.version, "EXPIRED");
+
+      let autoSoloApplied = false;
+      for (const member of pool.members) {
+        if (member.rideRequest.autoSoloConsent) {
+          // Rider explicitly opted in to auto-solo earlier
+          await prisma.rideRequest.update({
+            where: { id: member.rideRequestId },
+            data: { status: "SOLO" },
+          });
+          await prisma.poolMember.update({
+            where: { id: member.id },
+            data: { status: "CANCELLED" },
+          });
+          autoSoloApplied = true;
+        } else {
+          // Never auto-convert or auto-charge without consent
+          // Present options: keep waiting (bounded), go solo, or cancel free
+          await prisma.rideRequest.update({
+            where: { id: member.rideRequestId },
+            data: { status: "WAIT_CAP_EXPIRED" },
+          });
+          await prisma.poolMember.update({
+            where: { id: member.id },
+            data: { status: "WAITING" },
+          });
+        }
+      }
+
+      return { poolId, transitioned: true, newStatus: "EXPIRED", autoSoloApplied };
+    }
+  } catch (err) {
+    if (err instanceof OptimisticLockError) {
+      // Another concurrent read or cron already transitioned this pool
+      return { poolId, transitioned: false };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Evaluates wait-cap expiry on forming pools (Cron backstop)
  */
 export async function processWaitCapExpiries(referenceTime = new Date()): Promise<{
   confirmedPools: string[];
@@ -282,41 +364,143 @@ export async function processWaitCapExpiries(referenceTime = new Date()): Promis
       status: "FORMING",
       waitCapExpiry: { lte: referenceTime },
     },
-    include: {
-      members: {
-        include: { rideRequest: true },
-      },
-    },
+    select: { id: true },
   });
 
   const confirmedPools: string[] = [];
   const expiredPools: string[] = [];
 
-  for (const pool of expiredFormingPools) {
-    if (pool.members.length >= 2) {
-      // 2 or more members: auto-confirm the pool and allocate to trip
-      await transitionPoolStatus(pool.id, pool.version, "CONFIRMED");
-      confirmedPools.push(pool.id);
-    } else {
-      // Less than 2 members: wait-cap expired without forming a valid pool
-      await transitionPoolStatus(pool.id, pool.version, "EXPIRED");
-      expiredPools.push(pool.id);
-
-      // Transition lone rider to SOLO fallback
-      for (const member of pool.members) {
-        await prisma.rideRequest.update({
-          where: { id: member.rideRequestId },
-          data: { status: "SOLO" },
-        });
-        await prisma.poolMember.update({
-          where: { id: member.id },
-          data: { status: "CANCELLED" },
-        });
-      }
+  for (const p of expiredFormingPools) {
+    const res = await evaluatePoolWaitCap(p.id, referenceTime);
+    if (res.transitioned) {
+      if (res.newStatus === "CONFIRMED") confirmedPools.push(p.id);
+      if (res.newStatus === "EXPIRED") expiredPools.push(p.id);
     }
   }
 
   return { confirmedPools, expiredPools };
+}
+
+export type JourneyState =
+  | "IDLE"
+  | "SEARCHING"
+  | "FORMING"
+  | "WAIT_CAP_EXPIRED"
+  | "CONFIRMED"
+  | "DRIVER_ASSIGNED"
+  | "DRIVER_EN_ROUTE"
+  | "AT_BAY"
+  | "ON_TRIP"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "SOLO_REQUESTED";
+
+export class InvalidStateCombinationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidStateCombinationError";
+  }
+}
+
+/**
+ * Canonical function deriving user journey state across RideRequest + Pool + Trip
+ * Throws InvalidStateCombinationError for impossible lifecycle combinations.
+ */
+export function deriveJourneyState(params: {
+  rideRequest?: { status: string } | null;
+  pool?: { status: string } | null;
+  trip?: { status: string; driverAtBayAt?: Date | null } | null;
+}): JourneyState {
+  const { rideRequest, pool, trip } = params;
+
+  if (!rideRequest) {
+    return "IDLE";
+  }
+
+  const reqStatus = rideRequest.status;
+  const poolStatus = pool?.status;
+  const tripStatus = trip?.status;
+
+  // Invariant validation for impossible state combinations
+  if (tripStatus === "IN_TRANSIT" && reqStatus !== "CONFIRMED" && reqStatus !== "POOLING" && reqStatus !== "SOLO") {
+    throw new InvalidStateCombinationError(
+      `Trip cannot be 'IN_TRANSIT' when RideRequest is '${reqStatus}'.`
+    );
+  }
+
+  if (tripStatus === "COMPLETED" && reqStatus !== "COMPLETED" && reqStatus !== "CONFIRMED" && reqStatus !== "SOLO") {
+    throw new InvalidStateCombinationError(
+      `Trip cannot be 'COMPLETED' when RideRequest is '${reqStatus}'.`
+    );
+  }
+
+  if (trip && reqStatus === "SEARCHING") {
+    throw new InvalidStateCombinationError(
+      `Trip cannot exist when RideRequest is still 'SEARCHING'.`
+    );
+  }
+
+  if (poolStatus === "COMPLETED" && reqStatus === "SEARCHING") {
+    throw new InvalidStateCombinationError(
+      `Pool cannot be 'COMPLETED' while RideRequest is 'SEARCHING'.`
+    );
+  }
+
+  if (reqStatus === "CANCELLED") {
+    if (tripStatus === "IN_TRANSIT" || tripStatus === "COMPLETED") {
+      throw new InvalidStateCombinationError(
+        `Active trip cannot exist when RideRequest is 'CANCELLED'.`
+      );
+    }
+    return "CANCELLED";
+  }
+
+  if (reqStatus === "COMPLETED" || tripStatus === "COMPLETED") {
+    return "COMPLETED";
+  }
+
+  if (tripStatus === "IN_TRANSIT") {
+    return "ON_TRIP";
+  }
+
+  if (tripStatus === "AT_BAY" || (tripStatus === "EN_ROUTE_PICKUP" && trip?.driverAtBayAt)) {
+    return "AT_BAY";
+  }
+
+  if (tripStatus === "EN_ROUTE_PICKUP") {
+    return "DRIVER_EN_ROUTE";
+  }
+
+  if (tripStatus === "ASSIGNED") {
+    return "DRIVER_ASSIGNED";
+  }
+
+  if (reqStatus === "CONFIRMED" || poolStatus === "CONFIRMED" || poolStatus === "DISPATCHED") {
+    return "CONFIRMED";
+  }
+
+  if (reqStatus === "WAIT_CAP_EXPIRED") {
+    return "WAIT_CAP_EXPIRED";
+  }
+
+  if (reqStatus === "SOLO") {
+    return "SOLO_REQUESTED";
+  }
+
+  if (poolStatus === "EXPIRED") {
+    return "EXPIRED";
+  }
+
+  if (poolStatus === "FORMING" || reqStatus === "POOLING") {
+    return "FORMING";
+  }
+
+  if (reqStatus === "SEARCHING") {
+    return "SEARCHING";
+  }
+
+  return "IDLE";
 }
 
 /**

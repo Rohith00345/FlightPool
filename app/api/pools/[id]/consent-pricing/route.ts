@@ -27,10 +27,17 @@ export async function POST(
       where: { id: fareQuoteId },
     });
 
-    if (!quote || quote.userId !== session.userId) {
+    if (!quote) {
       return NextResponse.json(
-        { error: "Fare quote not found or does not belong to you." },
+        { error: "Fare quote not found." },
         { status: 404 }
+      );
+    }
+
+    if (quote.userId !== session.userId && session.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot consent to another rider's fare quote." },
+        { status: 403 }
       );
     }
 

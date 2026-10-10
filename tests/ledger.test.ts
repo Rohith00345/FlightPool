@@ -88,5 +88,105 @@ describe("Double-Entry Ledger & Financial Invariants", () => {
     expect(debitDriverPayable).toEqual(creditPlatformCash);
     expect(debitDriverPayable - creditPlatformCash).toBe(0);
   });
+
+  it("proves weekly payouts stay PENDING until confirmed, and ledger posts on confirmation", async () => {
+    const { prisma } = await import("../lib/prisma");
+    const { processWeeklyDriverPayouts, confirmDriverPayout, getAccountBalancePaise } = await import("../lib/ledger");
+
+    // Create a test driver
+    const driver = await prisma.driver.upsert({
+      where: { phone: "+919988776655" },
+      update: {},
+      create: {
+        id: `drv_payout_test_${Date.now()}`,
+        name: "Payout Test Driver",
+        phone: "+919988776655",
+        rating: 4.95,
+      },
+    });
+
+    // Credit driver payable account with ₹450 (45000 paise)
+    const payableAccount = await prisma.ledgerAccount.upsert({
+      where: {
+        ownerType_ownerId_accountType: {
+          ownerType: "driver",
+          ownerId: driver.id,
+          accountType: "payable",
+        },
+      },
+      update: {},
+      create: {
+        ownerType: "driver",
+        ownerId: driver.id,
+        accountType: "payable",
+        currency: "INR",
+      },
+    });
+
+    const txnId = `credit_init_${Date.now()}`;
+    await prisma.ledgerEntry.create({
+      data: {
+        txnId,
+        accountId: payableAccount.id,
+        direction: "CREDIT",
+        amountPaise: 45000,
+        refType: "PAYMENT",
+      },
+    });
+
+    const periodStart = new Date("2026-10-01");
+    const periodEnd = new Date("2026-10-07");
+
+    try {
+      // 1. Run payout job
+      const jobResult = await processWeeklyDriverPayouts({ periodStart, periodEnd });
+      expect(jobResult.payoutsProcessed).toBeGreaterThan(0);
+
+      const driverPayout = jobResult.payouts.find((p) => p.driverId === driver.id);
+      expect(driverPayout).toBeDefined();
+      expect(driverPayout?.status).toBe("PENDING");
+
+      // Verify Payout record in DB is PENDING and paidAt is null
+      const dbPayout = await prisma.payout.findUniqueOrThrow({
+        where: { id: driverPayout!.id },
+      });
+      expect(dbPayout.status).toBe("PENDING");
+      expect(dbPayout.paidAt).toBeNull();
+
+      // Verify NO bank debit ledger entry posted yet for this payout
+      const unconfirmedEntries = await prisma.ledgerEntry.findMany({
+        where: { refId: dbPayout.id, refType: "PAYOUT" },
+      });
+      expect(unconfirmedEntries.length).toBe(0);
+
+      // 2. Confirm payout via PayoutProvider callback
+      const confirmResult = await confirmDriverPayout(dbPayout.id, "bank_ref_778899");
+      expect(confirmResult.isBalanced).toBe(true);
+      expect(confirmResult.amountPaise).toBe(45000);
+
+      // Verify Payout record in DB is now PAID
+      const paidDbPayout = await prisma.payout.findUniqueOrThrow({
+        where: { id: dbPayout.id },
+      });
+      expect(paidDbPayout.status).toBe("PAID");
+      expect(paidDbPayout.paidAt).not.toBeNull();
+
+      // Verify balancing ledger entries exist and are equal
+      const payoutEntries = await prisma.ledgerEntry.findMany({
+        where: { txnId: confirmResult.txnId },
+      });
+      const debits = payoutEntries.filter((e) => e.direction === "DEBIT").reduce((s, e) => s + e.amountPaise, 0);
+      const credits = payoutEntries.filter((e) => e.direction === "CREDIT").reduce((s, e) => s + e.amountPaise, 0);
+      expect(debits).toBe(45000);
+      expect(credits).toBe(45000);
+      expect(debits).toEqual(credits);
+    } finally {
+      // Clean up test driver data
+      await prisma.ledgerEntry.deleteMany({ where: { accountId: payableAccount.id } });
+      await prisma.payout.deleteMany({ where: { driverId: driver.id } });
+      await prisma.ledgerAccount.deleteMany({ where: { ownerId: driver.id } });
+      await prisma.driver.delete({ where: { id: driver.id } });
+    }
+  });
 });
 

@@ -47,8 +47,12 @@ export async function GET(
   }
 
   if (!isAuthorized) {
-    return new Response(JSON.stringify({ error: "Unauthorized access to live stream" }), {
-      status: 401,
+    const statusCode = session ? 403 : 401;
+    const message = session
+      ? "Forbidden: You are not authorized to view this trip's stream."
+      : "Unauthorized: Authentication or valid share token required.";
+    return new Response(JSON.stringify({ error: message }), {
+      status: statusCode,
       headers: { "Content-Type": "application/json" },
     });
   }

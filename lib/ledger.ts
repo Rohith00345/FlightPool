@@ -391,150 +391,225 @@ export async function verifyTransactionBalance(txnId: string): Promise<boolean> 
   return debits === credits;
 }
 
-/**
- * Executes the weekly driver payout batch job.
- * Creates payout records and posts balancing double-entry ledger transfers:
- * DEBIT: Driver Payable (Liability decreases)
- * CREDIT: Platform Cash (Asset decreases)
- * Invariant: Sum of DEBITS strictly equals Sum of CREDITS.
- */
-export async function processWeeklyDriverPayouts(params: {
-  periodStart: Date;
-  periodEnd: Date;
-  driverId?: string;
-}): Promise<{
-  payoutsProcessed: number;
-  totalPaidOutPaise: number;
-  postingResults: LedgerPostingResult[];
-}> {
-  const drivers = await prisma.driver.findMany({
-    where: params.driverId ? { id: params.driverId } : {},
-  });
 
-  const postingResults: LedgerPostingResult[] = [];
-  let totalPaidOutPaise = 0;
+export interface PayoutProvider {
+  name: string;
+  dispatchPayout(payout: { id: string; driverId: string; netPaise: number }): Promise<{
+    payoutId: string;
+    status: "PENDING" | "CONFIRMED" | "FAILED";
+    transferRef?: string;
+  }>;
+}
+
+export class MockPayoutProvider implements PayoutProvider {
+  name = "Mock IMPS/NEFT Provider";
+  async dispatchPayout(payout: { id: string; driverId: string; netPaise: number }) {
+    return {
+      payoutId: payout.id,
+      status: "PENDING" as const,
+      transferRef: `imps_${Date.now()}_${payout.driverId.slice(-4)}`,
+    };
+  }
+}
+
+export const defaultPayoutProvider = new MockPayoutProvider();
+
+/**
+ * Weekly Driver Payout Job: Aggregates driver earnings, creates PENDING payouts.
+ * Ledger entries are deferred until a PayoutProvider confirms settlement.
+ */
+export async function processWeeklyDriverPayouts(
+  params: {
+    periodStart: Date;
+    periodEnd: Date;
+  },
+  provider: PayoutProvider = defaultPayoutProvider
+): Promise<{
+  payoutsProcessed: number;
+  totalPendingPaise: number;
+  payouts: Array<{ id: string; driverId: string; netPaise: number; status: string }>;
+}> {
+  const drivers = await prisma.driver.findMany();
+  let totalPendingPaise = 0;
   let payoutsProcessed = 0;
+  const payoutsList = [];
 
   for (const driver of drivers) {
     const payableBalance = await getAccountBalancePaise("driver", driver.id, "payable");
     if (payableBalance <= 0) continue;
 
     const netPaise = payableBalance;
-    const txnId = `tx_payout_${driver.id}_${crypto.randomBytes(4).toString("hex")}`;
 
-    const posting = await prisma.$transaction(async (tx) => {
-      // 1. Resolve Accounts
-      let cashAccount = await tx.ledgerAccount.findUnique({
-        where: {
-          ownerType_ownerId_accountType: {
-            ownerType: "platform",
-            ownerId: "platform",
-            accountType: "cash",
-          },
-        },
-      });
-      if (!cashAccount) {
-        cashAccount = await tx.ledgerAccount.create({
-          data: {
-            ownerType: "platform",
-            ownerId: "platform",
-            accountType: "cash",
-            currency: "INR",
-          },
-        });
-      }
-
-      let driverPayableAccount = await tx.ledgerAccount.findUnique({
-        where: {
-          ownerType_ownerId_accountType: {
-            ownerType: "driver",
-            ownerId: driver.id,
-            accountType: "payable",
-          },
-        },
-      });
-      if (!driverPayableAccount) {
-        driverPayableAccount = await tx.ledgerAccount.create({
-          data: {
-            ownerType: "driver",
-            ownerId: driver.id,
-            accountType: "payable",
-            currency: "INR",
-          },
-        });
-      }
-
-      // 2. Post balancing entries
-      // DEBIT: Driver Payable (Liability decreases)
-      await tx.ledgerEntry.create({
-        data: {
-          txnId,
-          accountId: driverPayableAccount.id,
-          direction: "DEBIT",
-          amountPaise: netPaise,
-          refType: "PAYOUT",
-          refId: driver.id,
-        },
-      });
-
-      // CREDIT: Platform Cash (Asset decreases)
-      await tx.ledgerEntry.create({
-        data: {
-          txnId,
-          accountId: cashAccount.id,
-          direction: "CREDIT",
-          amountPaise: netPaise,
-          refType: "PAYOUT",
-          refId: driver.id,
-        },
-      });
-
-      // 3. Upsert Payout record
-      await tx.payout.upsert({
-        where: {
-          driverId_periodStart_periodEnd: {
-            driverId: driver.id,
-            periodStart: params.periodStart,
-            periodEnd: params.periodEnd,
-          },
-        },
-        update: {
-          grossPaise: netPaise,
-          commissionPaise: 0,
-          netPaise,
-          status: "PAID",
-          paidAt: new Date(),
-        },
-        create: {
+    // 1. Upsert Payout record with PENDING status
+    const payout = await prisma.payout.upsert({
+      where: {
+        driverId_periodStart_periodEnd: {
           driverId: driver.id,
           periodStart: params.periodStart,
           periodEnd: params.periodEnd,
-          grossPaise: netPaise,
-          commissionPaise: 0,
-          netPaise,
-          status: "PAID",
-          paidAt: new Date(),
         },
-      });
-
-      return {
-        txnId,
-        entriesCount: 2,
-        totalDebitedPaise: netPaise,
-        totalCreditedPaise: netPaise,
-        isBalanced: true,
-      };
+      },
+      update: {
+        grossPaise: netPaise,
+        commissionPaise: 0,
+        netPaise,
+        status: "PENDING",
+        paidAt: null,
+      },
+      create: {
+        driverId: driver.id,
+        periodStart: params.periodStart,
+        periodEnd: params.periodEnd,
+        grossPaise: netPaise,
+        commissionPaise: 0,
+        netPaise,
+        status: "PENDING",
+      },
     });
 
-    postingResults.push(posting);
-    totalPaidOutPaise += netPaise;
+    // 2. Dispatch to Payout Provider
+    await provider.dispatchPayout({
+      id: payout.id,
+      driverId: driver.id,
+      netPaise,
+    });
+
+    payoutsList.push({
+      id: payout.id,
+      driverId: driver.id,
+      netPaise,
+      status: "PENDING",
+    });
+    totalPendingPaise += netPaise;
     payoutsProcessed++;
   }
 
   return {
     payoutsProcessed,
-    totalPaidOutPaise,
-    postingResults,
+    totalPendingPaise,
+    payouts: payoutsList,
   };
 }
+
+/**
+ * Confirms a driver payout upon PayoutProvider webhook or settlement confirmation.
+ * Posts the double-entry bank transfer entry to the ledger.
+ */
+export async function confirmDriverPayout(
+  payoutId: string,
+  transferRef?: string
+): Promise<{
+  txnId: string;
+  payoutId: string;
+  driverId: string;
+  amountPaise: number;
+  isBalanced: boolean;
+}> {
+  return await prisma.$transaction(async (tx) => {
+    const payout = await tx.payout.findUnique({
+      where: { id: payoutId },
+    });
+
+    if (!payout) {
+      throw new Error(`Payout not found: ${payoutId}`);
+    }
+
+    if (payout.status === "PAID") {
+      // Idempotent: already confirmed
+      return {
+        txnId: `idem_${payout.id}`,
+        payoutId: payout.id,
+        driverId: payout.driverId,
+        amountPaise: payout.netPaise,
+        isBalanced: true,
+      };
+    }
+
+    const netPaise = payout.netPaise;
+    const txnId = `tx_payout_${payout.driverId}_${crypto.randomBytes(4).toString("hex")}`;
+
+    // Resolve accounts
+    let cashAccount = await tx.ledgerAccount.findUnique({
+      where: {
+        ownerType_ownerId_accountType: {
+          ownerType: "platform",
+          ownerId: "platform",
+          accountType: "cash",
+        },
+      },
+    });
+    if (!cashAccount) {
+      cashAccount = await tx.ledgerAccount.create({
+        data: {
+          ownerType: "platform",
+          ownerId: "platform",
+          accountType: "cash",
+          currency: "INR",
+        },
+      });
+    }
+
+    let driverPayableAccount = await tx.ledgerAccount.findUnique({
+      where: {
+        ownerType_ownerId_accountType: {
+          ownerType: "driver",
+          ownerId: payout.driverId,
+          accountType: "payable",
+        },
+      },
+    });
+    if (!driverPayableAccount) {
+      driverPayableAccount = await tx.ledgerAccount.create({
+        data: {
+          ownerType: "driver",
+          ownerId: payout.driverId,
+          accountType: "payable",
+          currency: "INR",
+        },
+      });
+    }
+
+    // DEBIT: Driver Payable (Liability decreases)
+    await tx.ledgerEntry.create({
+      data: {
+        txnId,
+        accountId: driverPayableAccount.id,
+        direction: "DEBIT",
+        amountPaise: netPaise,
+        refType: "PAYOUT",
+        refId: transferRef || payout.id,
+      },
+    });
+
+    // CREDIT: Platform Cash (Asset decreases)
+    await tx.ledgerEntry.create({
+      data: {
+        txnId,
+        accountId: cashAccount.id,
+        direction: "CREDIT",
+        amountPaise: netPaise,
+        refType: "PAYOUT",
+        refId: transferRef || payout.id,
+      },
+    });
+
+    // Update Payout record to PAID
+    await tx.payout.update({
+      where: { id: payout.id },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+      },
+    });
+
+    return {
+      txnId,
+      payoutId: payout.id,
+      driverId: payout.driverId,
+      amountPaise: netPaise,
+      isBalanced: true,
+    };
+  });
+}
+
 

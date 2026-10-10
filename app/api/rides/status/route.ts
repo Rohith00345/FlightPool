@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest } from "@/lib/auth";
-import { processWaitCapExpiries } from "@/lib/pool-engine";
+import { evaluatePoolWaitCap, deriveJourneyState } from "@/lib/pool-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +22,24 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Lazily evaluate wait-cap expiry on every ride/pool status read (works without cron)
-    await processWaitCapExpiries(new Date());
+    // Find if user is in a forming pool and lazily evaluate wait-cap expiry on caller's own pool
+    const userPoolMember = await prisma.poolMember.findFirst({
+      where: {
+        userId,
+        pool: { status: "FORMING" },
+      },
+      select: { poolId: true },
+    });
+
+    if (userPoolMember?.poolId) {
+      await evaluatePoolWaitCap(userPoolMember.poolId, new Date());
+    }
 
     // Find the latest active ride request for this user
     const rideRequest = await prisma.rideRequest.findFirst({
       where: {
         userId,
-        status: { in: ["SEARCHING", "POOLING", "CONFIRMED", "SOLO", "COMPLETED"] },
+        status: { in: ["SEARCHING", "POOLING", "CONFIRMED", "SOLO", "COMPLETED", "WAIT_CAP_EXPIRED"] },
       },
       include: {
         flight: true,
@@ -172,6 +182,7 @@ export async function GET(req: NextRequest) {
                 totalDurationMin: pool.trip.totalDurationMin,
               }
             : null,
+          journeyState: deriveJourneyState({ rideRequest, pool, trip: pool.trip }),
         },
       });
     }
@@ -190,6 +201,7 @@ export async function GET(req: NextRequest) {
     const isWaitExpired = readyTime ? (Date.now() - readyTime.getTime()) > 20 * 60 * 1000 : false;
 
     return NextResponse.json({
+      journeyState: deriveJourneyState({ rideRequest }),
       activeRequest: {
         id: rideRequest.id,
         status: rideRequest.status,

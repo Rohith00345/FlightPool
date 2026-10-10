@@ -71,7 +71,8 @@ model RideRequest {
   luggageCount       Int          @default(1)
   womenOnly          Boolean      @default(false)
   readyTime          DateTime?
-  status             String       @default("SEARCHING") // SEARCHING, POOLING, CONFIRMED, SOLO, CANCELLED, COMPLETED
+  autoSoloConsent    Boolean      @default(false)
+  status             String       @default("SEARCHING") // SEARCHING, POOLING, CONFIRMED, SOLO, CANCELLED, COMPLETED, WAIT_CAP_EXPIRED
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -162,8 +163,9 @@ model Trip {
   poolId           String     @unique
   driverId         String
   vehicleId        String
-  status           String     @default("ASSIGNED") // ASSIGNED, EN_ROUTE_PICKUP, IN_TRANSIT, COMPLETED, CANCELLED
+  status           String     @default("ASSIGNED") // ASSIGNED, EN_ROUTE_PICKUP, AT_BAY, IN_TRANSIT, COMPLETED, CANCELLED
   otpCode          String     @default("1234")
+  driverAtBayAt    DateTime?
   startTime        DateTime?
   endTime          DateTime?
   totalDistanceKm  Float      @default(0)

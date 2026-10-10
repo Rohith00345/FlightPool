@@ -17,7 +17,18 @@ export async function POST(req: NextRequest) {
     }
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN" && session.userId !== userId) {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role === "DRIVER") {
+      return NextResponse.json(
+        { error: "Forbidden: Drivers cannot request solo passenger rides." },
+        { status: 403 }
+      );
+    }
+
+    if (session.role !== "ADMIN" && session.userId !== userId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot trigger solo fallback for another rider" },
         { status: 403 }

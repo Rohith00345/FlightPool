@@ -716,4 +716,118 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
     const restrictedNotice = page.locator("text=Access restricted to Marshals and Airport Admins");
     await expect(restrictedNotice).toBeVisible();
   });
+
+  test("26. Denial tests for match, solo, stream, and consent-pricing routes", async ({ request }) => {
+    // 1. Authenticate users
+    const riderALogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919811559901", otp: "123456", name: "Denial Rider A", role: "RIDER" },
+    });
+    const { user: userA, token: tokenA } = await riderALogin.json();
+
+    const riderBLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919811559902", otp: "123456", name: "Denial Rider B", role: "RIDER" },
+    });
+    const { user: userB, token: tokenB } = await riderBLogin.json();
+
+    const driverLogin = await request.post("/api/auth/otp", {
+      data: { identifier: "+919811559903", otp: "123456", name: "Denial Driver", role: "DRIVER" },
+    });
+    const { token: driverToken } = await driverLogin.json();
+
+    const flightsRes = await request.get("/api/flights");
+    const flight = (await flightsRes.json()).flights[0];
+
+    // Create a ride request for Rider B
+    const rideBRes = await request.post("/api/rides/request", {
+      headers: { Authorization: `Bearer ${tokenB}` },
+      data: { userId: userB.id, flightId: flight.id, destinationZone: "Andheri" },
+    });
+    const { rideRequest: rideB } = await rideBRes.json();
+
+    // A. /api/pools/match
+    // Anonymous -> 401
+    const matchAnon = await request.post("/api/pools/match", {
+      data: { flightId: flight.id, terminal: "T2" },
+    });
+    expect(matchAnon.status()).toBe(401);
+
+    // Wrong role (Driver) -> 403
+    const matchDriver = await request.post("/api/pools/match", {
+      headers: { Authorization: `Bearer ${driverToken}` },
+      data: { flightId: flight.id, terminal: "T2" },
+    });
+    expect(matchDriver.status()).toBe(403);
+
+    // B. /api/pools/solo
+    // Anonymous -> 401
+    const soloAnon = await request.post("/api/pools/solo", {
+      data: { userId: userB.id, rideRequestId: rideB.id },
+    });
+    expect(soloAnon.status()).toBe(401);
+
+    // Wrong role (Driver) -> 403
+    const soloDriver = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${driverToken}` },
+      data: { userId: userB.id, rideRequestId: rideB.id },
+    });
+    expect(soloDriver.status()).toBe(403);
+
+    // Cross-user (Rider A attempting for Rider B) -> 403
+    const soloCross = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      data: { userId: userA.id, rideRequestId: rideB.id },
+    });
+    expect(soloCross.status()).toBe(403);
+
+    // Convert Rider B to solo so trip is created
+    const soloBRes = await request.post("/api/pools/solo", {
+      headers: { Authorization: `Bearer ${tokenB}` },
+      data: { userId: userB.id, rideRequestId: rideB.id },
+    });
+    expect(soloBRes.status()).toBe(200);
+    const { trip: tripB } = await soloBRes.json();
+
+    // C. /api/trips/[id]/stream
+    // Anonymous -> 401
+    const streamAnon = await request.get(`/api/trips/${tripB.id}/stream`);
+    expect(streamAnon.status()).toBe(401);
+
+    // Cross-user (Rider A attempting to stream Rider B's trip) -> 403
+    const streamCross = await request.get(`/api/trips/${tripB.id}/stream`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    expect(streamCross.status()).toBe(403);
+
+    // D. /api/pools/[id]/consent-pricing
+    const { prisma } = await import("../../lib/prisma");
+    const testQuote = await prisma.fareQuote.create({
+      data: {
+        userId: userB.id,
+        rideRequestId: rideB.id,
+        destinationZone: "Andheri",
+        soloFarePaise: 35000,
+        poolFarePaise: 24500,
+        minSavingPct: 30,
+        expiresAt: new Date(Date.now() + 600000),
+        status: "ACTIVE",
+      },
+    });
+
+    try {
+      // Anonymous -> 401
+      const consentAnon = await request.post(`/api/pools/pool_test/consent-pricing`, {
+        data: { fareQuoteId: testQuote.id, accepted: true },
+      });
+      expect(consentAnon.status()).toBe(401);
+
+      // Cross-user (Rider A consenting to Rider B's fare quote) -> 403
+      const consentCross = await request.post(`/api/pools/pool_test/consent-pricing`, {
+        headers: { Authorization: `Bearer ${tokenA}` },
+        data: { fareQuoteId: testQuote.id, accepted: true },
+      });
+      expect(consentCross.status()).toBe(403);
+    } finally {
+      await prisma.fareQuote.delete({ where: { id: testQuote.id } }).catch(() => {});
+    }
+  });
 });
