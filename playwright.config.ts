@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || "test_jwt_session_secret_min_32_characters_2026";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,

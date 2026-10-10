@@ -41,7 +41,17 @@ export async function POST(req: NextRequest) {
     if (!otp) {
       // Step 1: Generate OTP, store in database, and dispatch via provider
       const generatedCode = await createOtpRequestInDatabase(identifier, ip);
-      await provider.sendOtp(identifier, generatedCode);
+      const sendResult = await provider.sendOtp(identifier, generatedCode);
+
+      if (!demo && !sendResult.success) {
+        return NextResponse.json(
+          {
+            error: "SMS delivery failed: " + (sendResult.error || "SMS provider unavailable"),
+            provider: provider.name,
+          },
+          { status: 502 }
+        );
+      }
 
       return NextResponse.json({
         success: true,

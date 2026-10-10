@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { isDemoMode } from "../lib/demo";
+import { assertLocalDatabase } from "../lib/db-guard";
 
 const prisma = new PrismaClient();
 
@@ -137,6 +138,7 @@ const PASSENGERS_DATA = [
 
 async function main() {
   const isDemo = (isDemoMode() || process.argv.includes("--demo")) && !process.argv.includes("--prod");
+  assertLocalDatabase(isDemo ? "Demo database seeding (db:seed:demo)" : "Production reference seeding (db:seed)");
 
   if (isDemo) {
     console.log("DEMO_MODE active: Cleaning old demo records and OTP requests...");

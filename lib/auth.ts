@@ -4,10 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 export function getAuthSecret(): string {
   const secret = process.env.SESSION_SECRET || process.env.AUTH_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("FATAL: SESSION_SECRET or AUTH_SECRET environment variable is required in production with no fallback.");
-    }
-    return "flightpool_dev_secret_jwt_hmac_key_2026";
+    throw new Error("FATAL: SESSION_SECRET or AUTH_SECRET environment variable is required with no fallback.");
   }
   return secret;
 }
