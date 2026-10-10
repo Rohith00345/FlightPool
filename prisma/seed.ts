@@ -136,32 +136,38 @@ const PASSENGERS_DATA = [
 ];
 
 async function main() {
-  console.log("Cleaning old database records...");
-  await prisma.otpRequest.deleteMany();
-  await prisma.incident.deleteMany();
-  await prisma.rating.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.trip.deleteMany();
-  await prisma.poolMember.deleteMany();
-  await prisma.pool.deleteMany();
-  await prisma.rideRequest.deleteMany();
-  await prisma.passengerVerification.deleteMany();
-  await prisma.driver.deleteMany();
-  await prisma.vehicle.deleteMany();
-  await prisma.flight.deleteMany();
-  await prisma.consent.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.sosEvent.deleteMany();
-  await prisma.driverIncentive.deleteMany();
-  await prisma.payout.deleteMany();
-  await prisma.ledgerEntry.deleteMany();
+  const isDemo = (isDemoMode() || process.argv.includes("--demo")) && !process.argv.includes("--prod");
+
+  if (isDemo) {
+    console.log("DEMO_MODE active: Cleaning old demo records and OTP requests...");
+    await prisma.otpRequest.deleteMany();
+    await prisma.incident.deleteMany();
+    await prisma.rating.deleteMany();
+    await prisma.payment.deleteMany();
+    await prisma.trip.deleteMany();
+    await prisma.poolMember.deleteMany();
+    await prisma.pool.deleteMany();
+    await prisma.rideRequest.deleteMany();
+    await prisma.passengerVerification.deleteMany();
+    await prisma.driver.deleteMany();
+    await prisma.vehicle.deleteMany();
+    await prisma.flight.deleteMany();
+    await prisma.consent.deleteMany();
+    await prisma.auditLog.deleteMany();
+    await prisma.sosEvent.deleteMany();
+    await prisma.driverIncentive.deleteMany();
+    await prisma.payout.deleteMany();
+    await prisma.ledgerEntry.deleteMany();
+    await prisma.user.deleteMany();
+  }
+
+  console.log("Cleaning and refreshing reference tables...");
   await prisma.ledgerAccount.deleteMany();
   await prisma.pricingRule.deleteMany();
   await prisma.pickupBay.deleteMany();
   await prisma.terminal.deleteMany();
   await prisma.zone.deleteMany();
   await prisma.airport.deleteMany();
-  await prisma.user.deleteMany();
 
   console.log("Seeding Airport, Terminals, Bays & Zones for Mumbai (BOM)...");
   const airport = await prisma.airport.create({
@@ -263,14 +269,13 @@ async function main() {
     prisma.ledgerAccount.create({ data: { ownerType: "tax", accountType: "gst" } }),
   ]);
 
-  const isDemo = (isDemoMode() || process.argv.includes("--demo")) && !process.argv.includes("--prod");
   if (!isDemo) {
     console.log("Production reference data seeded successfully (Zero demo users, drivers, or pools created).");
     return;
   }
 
   console.log("DEMO_MODE is true: Creating Demo Admin User, Vehicles, Drivers, and Pools...");
-  const admin = await prisma.user.create({
+  await prisma.user.create({
     data: {
       name: "FlightPool Admin",
       phone: "+919999999999",
@@ -339,7 +344,7 @@ async function main() {
     }),
   ]);
 
-  const drivers = await Promise.all([
+  await Promise.all([
     prisma.driver.create({
       data: {
         name: "Ramesh Shinde",

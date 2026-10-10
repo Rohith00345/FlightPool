@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Share2, Copy, Check, MessageCircle, X, ShieldCheck } from "lucide-react";
+import { Share2, Copy, Check, MessageCircle, X } from "lucide-react";
 
 interface ShareTripModalProps {
   isOpen: boolean;

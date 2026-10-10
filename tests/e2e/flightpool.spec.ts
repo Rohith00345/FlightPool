@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("FlightPool Main End-to-End Journeys", () => {
   // Test 1: Full rider onboarding, boarding pass verification, zone picking, and pool matching
-  test("1. Main Journey: 3 riders get matched and complete a trip", async ({ request, page }) => {
+  test("1. Main Journey: 3 riders get matched and complete a trip", async ({ request }) => {
     // Rider 1: Login via API / UI
     const authRes = await request.post("/api/auth/otp", {
       data: {

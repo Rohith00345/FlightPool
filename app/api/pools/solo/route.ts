@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes, MUMBAI_ZONES } from "@/lib/geo";
+import { AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes } from "@/lib/geo";
 import { calculateSoloFare, getTimeOfDayMultiplier } from "@/lib/pricing";
 import { getSessionFromRequest } from "@/lib/auth";
 
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const member = await prisma.poolMember.create({
+    await prisma.poolMember.create({
       data: {
         poolId: soloPool.id,
         rideRequestId: request.id,

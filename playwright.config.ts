@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -28,6 +31,8 @@ export default defineConfig({
         DEMO_MODE: "true",
         NEXT_PUBLIC_DEMO_MODE: "true",
         PORT: "3000",
+        SESSION_SECRET: "test_jwt_session_secret_min_32_characters_2026",
+        ADMIN_PHONES: "+919999999999",
       },
     },
     {
@@ -39,6 +44,8 @@ export default defineConfig({
         PORT: "3001",
         DEMO_MODE: "",
         NEXT_PUBLIC_DEMO_MODE: "",
+        SESSION_SECRET: "test_jwt_session_secret_min_32_characters_2026",
+        ADMIN_PHONES: "+919999999999",
       },
     },
   ],

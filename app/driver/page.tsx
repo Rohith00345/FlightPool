@@ -2,18 +2,45 @@
 
 import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
-import { Car, MapPin, CheckCircle, Navigation, Phone, IndianRupee, RefreshCw, Lock } from "lucide-react";
+import { Car, CheckCircle, Navigation, RefreshCw, Lock } from "lucide-react";
 import { isClientDemoMode } from "@/lib/demo";
 
+interface DriverStop {
+  memberId: string;
+  dropoffOrder: number;
+  riderName: string;
+  destinationAddress: string;
+  poolFare: number;
+}
+
+interface DriverTripItem {
+  id: string;
+  status: string;
+  driverPayout?: number;
+  pickupBay?: string;
+}
+
+interface DriverActiveTrip {
+  id: string;
+  status: string;
+  driverPayout: number;
+  pickupBay?: string;
+  otpCode?: string;
+  stops: DriverStop[];
+  totalFare?: number;
+  platformFee?: number;
+}
+
 export default function DriverViewPage() {
-  const [trips, setTrips] = useState<any[]>([]);
+  const [trips, setTrips] = useState<DriverTripItem[]>([]);
+  void trips;
   const [loading, setLoading] = useState(true);
+  void loading;
   const [unauthorized, setUnauthorized] = useState(false);
-  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [activeTrip, setActiveTrip] = useState<DriverActiveTrip | null>(null);
 
   const fetchTrips = async () => {
     try {
-      setLoading(true);
       const res = await fetch("/api/driver/trips");
       if (res.status === 401 || res.status === 403) {
         setUnauthorized(true);
@@ -69,7 +96,31 @@ export default function DriverViewPage() {
   };
 
   useEffect(() => {
-    fetchTrips();
+    let ignore = false;
+    fetch("/api/driver/trips")
+      .then((res) => {
+        if (res.status === 401 || res.status === 403) {
+          setUnauthorized(true);
+          setTrips([]);
+          return null;
+        }
+        setUnauthorized(false);
+        return res.json();
+      })
+      .then((data) => {
+        if (ignore || !data) return;
+        if (data.trips && data.trips.length > 0) {
+          setTrips(data.trips);
+          loadTripDetails(data.trips[0].id);
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const handleUpdateTrip = async (action: "START_PICKUP" | "START_TRIP" | "COMPLETE_TRIP") => {
@@ -172,7 +223,7 @@ export default function DriverViewPage() {
                 Optimized Route Stops:
               </p>
               <div className="space-y-2">
-                {activeTrip.stops.map((stop: any) => (
+                {activeTrip.stops.map((stop: DriverStop) => (
                   <div
                     key={stop.memberId}
                     className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs"

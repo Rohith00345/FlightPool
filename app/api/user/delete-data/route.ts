@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromRequest } from "@/lib/auth";
@@ -23,19 +24,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Delete consents
+    // 1. Delete personal marketing/location consents
     await prisma.consent.deleteMany({ where: { userId: targetUserId } });
 
-    // 2. Delete verifications (boarding pass data scrubbed)
+    // 2. Delete boarding pass and PNR verifications
     await prisma.passengerVerification.deleteMany({ where: { userId: targetUserId } });
 
-    // 3. Anonymize user profile
+    // 3. Anonymize user profile (Financial, payment and ledger records are retained
+    //    for statutory taxation and ledger audit compliance, linked only to this anonymized profile).
     await prisma.user.update({
       where: { id: targetUserId },
       data: {
         name: "Anonymous User (Deleted)",
         email: null,
-        phone: `+9100${Math.floor(10000000 + Math.random() * 90000000)}`,
+        phone: `+9100${crypto.randomInt(10000000, 99999999)}`,
         gender: "UNSPECIFIED",
       },
     });

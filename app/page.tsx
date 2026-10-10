@@ -13,26 +13,16 @@ import {
   Plane,
   CheckCircle2,
   Clock,
-  Users,
   Luggage,
-  Shield,
-  Sparkles,
-  Phone,
   ArrowRight,
-  LogOut,
   RefreshCw,
-  Info,
   Car,
-  ChevronRight,
   Search,
   Check,
-  MapPin,
   Share2,
   AlertTriangle,
   QrCode,
   ShieldCheck,
-  Star,
-  Navigation,
   Lock,
 } from "lucide-react";
 
@@ -65,6 +55,57 @@ interface FlightItem {
   activeRequestsCount: number;
 }
 
+interface PoolMember {
+  userId: string;
+  name: string;
+  maskedAddress?: string;
+  luggageCount?: number;
+  gender?: string;
+  destinationZone?: string;
+}
+
+interface PoolStop {
+  memberId: string;
+  dropoffOrder: number;
+  riderName?: string;
+  destinationAddress?: string;
+  destinationZone?: string;
+}
+
+interface PoolVehicle {
+  model?: string;
+  licensePlate?: string;
+}
+
+interface PoolDriver {
+  name?: string;
+}
+
+interface PoolTrip {
+  id?: string;
+  status?: string;
+  otpCode?: string;
+}
+
+interface PoolDetails {
+  id: string;
+  status?: string;
+  isWaitCapExpired?: boolean;
+  destinationCluster?: string;
+  members: PoolMember[];
+  stops?: PoolStop[];
+  vehicle?: PoolVehicle;
+  driver?: PoolDriver;
+  trip?: PoolTrip;
+}
+
+interface ActiveRideRequest {
+  id: string;
+  status: string;
+  destinationZone?: string;
+  isWaitCapExpired?: boolean;
+}
+
 export default function Home() {
   const demoMode = isClientDemoMode();
 
@@ -90,24 +131,40 @@ export default function Home() {
   const [pnrCode, setPnrCode] = useState("PNR894");
   const [seatCode, setSeatCode] = useState("12A");
   const [isVerified, setIsVerified] = useState(false);
+  void isVerified;
 
   // Destination & Ride Preferences
   const [selectedZone, setSelectedZone] = useState("Thane");
   const [selectedAddress, setSelectedAddress] = useState("Hiranandani Estate, Ghodbunder Rd");
   const [luggageCount, setLuggageCount] = useState(1);
   const [womenOnly, setWomenOnly] = useState(false);
-  const [estimates, setEstimates] = useState<{
-    soloFare: number;
-    estimatedPoolFare: number;
-    estimatedSavings: number;
-    savingsPct: number;
-  } | null>(null);
+
+  // Transparent Fare Calculation derived from selectedZone & selectedFlight
+  const estimates = useMemo(() => {
+    if (!selectedFlight) return null;
+    const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
+    const solo = Math.round(120 + 18 * zoneInfo.approxDistanceKmFromT2 * 1.25);
+    const pool = Math.round(solo * 0.49); // guaranteed ~51% savings
+    return {
+      soloFare: solo,
+      estimatedPoolFare: pool,
+      estimatedSavings: solo - pool,
+      savingsPct: Math.round(((solo - pool) / solo) * 100),
+    };
+  }, [selectedZone, selectedFlight]);
+
+  const handleSelectZone = (zoneId: string) => {
+    setSelectedZone(zoneId);
+    const zoneInfo = MUMBAI_ZONES[zoneId] || MUMBAI_ZONES["Thane"];
+    setSelectedAddress(zoneInfo.popularDropoffs[0]);
+  };
 
   // Live Ride & Pool State
   const [rideStatus, setRideStatus] = useState<string>("SEARCHING"); // "SEARCHING" | "POOL_FORMING" | "WAIT_CAP_EXPIRED" | "POOL_CONFIRMED" | "DRIVER_ASSIGNED" | "ON_TRIP" | "COMPLETED"
-  const [poolData, setPoolData] = useState<any>(null);
-  const [activeRequest, setActiveRequest] = useState<any>(null);
+  const [poolData, setPoolData] = useState<PoolDetails | null>(null);
+  const [activeRequest, setActiveRequest] = useState<ActiveRideRequest | null>(null);
   const [coRidersCount, setCoRidersCount] = useState<number>(0);
+  void coRidersCount;
   const [loadingAction, setLoadingAction] = useState<boolean>(false);
 
   // Modals
@@ -177,11 +234,54 @@ export default function Home() {
 
   useEffect(() => {
     if (step === "RIDE_STATE") {
-      refreshRideStatus();
-      const interval = setInterval(refreshRideStatus, 5000);
-      return () => clearInterval(interval);
+      let ignore = false;
+      const poll = () => {
+        if (!currentUser) return;
+        fetch(`/api/rides/status?userId=${currentUser.id}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (ignore) return;
+            if (data.activeRequest) {
+              setActiveRequest(data.activeRequest);
+              if (data.pool) {
+                setPoolData(data.pool);
+                const p = data.pool;
+                if (p.trip) {
+                  if (p.trip.status === "COMPLETED") {
+                    setRideStatus("COMPLETED");
+                  } else if (p.trip.status === "IN_TRANSIT") {
+                    setRideStatus("ON_TRIP");
+                  } else {
+                    setRideStatus("DRIVER_ASSIGNED");
+                  }
+                } else if (p.status === "CONFIRMED") {
+                  setRideStatus("POOL_CONFIRMED");
+                } else if (p.isWaitCapExpired) {
+                  setRideStatus("WAIT_CAP_EXPIRED");
+                } else {
+                  setRideStatus("POOL_FORMING");
+                }
+              } else {
+                setPoolData(null);
+                setCoRidersCount(data.coRidersFound || 0);
+                if (data.activeRequest.isWaitCapExpired) {
+                  setRideStatus("WAIT_CAP_EXPIRED");
+                } else {
+                  setRideStatus("SEARCHING");
+                }
+              }
+            }
+          })
+          .catch((e) => console.error("Status poll error:", e));
+      };
+      poll();
+      const interval = setInterval(poll, 5000);
+      return () => {
+        ignore = true;
+        clearInterval(interval);
+      };
     }
-  }, [step, refreshRideStatus]);
+  }, [step, currentUser]);
 
   // Quick Demo Logins
   const handleQuickLogin = (name: string, phone: string, gender: string) => {
@@ -217,7 +317,7 @@ export default function Home() {
         setCurrentUser(data.user);
         setStep("FLIGHT");
       }
-    } catch (err) {
+    } catch {
       setAuthError("Network connection error. Please try again.");
     } finally {
       setLoadingAction(false);
@@ -227,7 +327,8 @@ export default function Home() {
   // Step 2: Select Flight
   const handleSelectFlight = (f: FlightItem) => {
     setSelectedFlight(f);
-    setBoardingPassCode(`BP-${f.flightNumber.replace("-", "")}-${Math.floor(10 + Math.random() * 89)}A`);
+    const suffix = ((f.flightNumber.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 89) + 10);
+    setBoardingPassCode(`BP-${f.flightNumber.replace("-", "")}-${suffix}A`);
   };
 
   // Filtered flights
@@ -271,23 +372,6 @@ export default function Home() {
       setLoadingAction(false);
     }
   };
-
-  // Step 4: Calculate upfront fare estimates when zone changes
-  useEffect(() => {
-    if (!selectedFlight) return;
-    const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
-    setSelectedAddress(zoneInfo.popularDropoffs[0]);
-
-    // Transparent calculation
-    const solo = Math.round(120 + 18 * zoneInfo.approxDistanceKmFromT2 * 1.25);
-    const pool = Math.round(solo * 0.49); // guaranteed ~51% savings
-    setEstimates({
-      soloFare: solo,
-      estimatedPoolFare: pool,
-      estimatedSavings: solo - pool,
-      savingsPct: Math.round(((solo - pool) / solo) * 100),
-    });
-  }, [selectedZone, selectedFlight]);
 
   // Step 5: "I've landed / I'm ready" button
   const handleImReady = async () => {
@@ -860,7 +944,7 @@ export default function Home() {
             <MapPicker
               terminal={selectedFlight.terminal as "T1" | "T2"}
               selectedZone={selectedZone}
-              onSelectZone={(z) => setSelectedZone(z)}
+              onSelectZone={(z) => handleSelectZone(z)}
               height="200px"
             />
 
@@ -880,7 +964,7 @@ export default function Home() {
                     <button
                       key={z.id}
                       type="button"
-                      onClick={() => setSelectedZone(z.id)}
+                      onClick={() => handleSelectZone(z.id)}
                       className={`p-2.5 rounded-xl border text-center transition-all ${
                         isSelected
                           ? "border-teal-600 bg-teal-50 text-teal-900 font-bold shadow-xs ring-1 ring-teal-500/30"
@@ -1062,7 +1146,7 @@ export default function Home() {
                     Verified Co-Riders in Vehicle:
                   </p>
                   <div className="space-y-2">
-                    {poolData.members.map((m: any, idx: number) => (
+                    {poolData.members.map((m: PoolMember) => (
                       <div
                         key={m.userId}
                         className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs"
@@ -1183,7 +1267,7 @@ export default function Home() {
                         Mumbai Airport Terminal {selectedFlight?.terminal} (Cab Lane P4)
                       </span>
                     </div>
-                    {poolData.stops?.map((stop: any) => (
+                    {poolData.stops?.map((stop: PoolStop) => (
                       <div
                         key={stop.memberId}
                         className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between"

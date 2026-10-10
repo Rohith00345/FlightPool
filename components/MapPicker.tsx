@@ -30,7 +30,6 @@ export default function MapPicker({
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      const airportCoords = AIRPORT_TERMINALS[terminal].coords;
       const map = L.map(mapContainerRef.current, {
         center: [19.12, 72.88], // Mumbai central
         zoom: 11,

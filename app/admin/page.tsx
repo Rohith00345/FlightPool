@@ -17,17 +17,66 @@ import {
   Lock,
 } from "lucide-react";
 
+interface AdminFlight {
+  id: string;
+  flightNumber: string;
+  airline: string;
+  origin: string;
+  terminal: string;
+  status: string;
+}
+
+interface AdminPool {
+  id: string;
+  destinationCluster: string;
+  terminal: string;
+  status: string;
+  membersCount: number;
+  driverName: string;
+  vehicle: string;
+  createdAt: string;
+}
+
+interface AdminIncident {
+  id: string;
+  type: string;
+  severity: string;
+  status: string;
+  description: string;
+}
+
+interface AdminData {
+  metrics?: {
+    matchRate: number;
+    fillRate: number;
+    avgWaitMinutes: number;
+    avgDetourMinutes: number;
+    platformRevenue: number;
+    activeIncidentsCount?: number;
+  };
+  flights?: AdminFlight[];
+  pools?: AdminPool[];
+  incidents?: AdminIncident[];
+}
+
+interface SimulationResult {
+  message: string;
+  terminal: string;
+  passengersProcessed: number;
+  newPoolsFormed: number;
+}
+
 export default function AdminPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
+  void loading;
   const [unauthorized, setUnauthorized] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [selectedFlightNumber, setSelectedFlightNumber] = useState("6E-204");
-  const [simulationResult, setSimulationResult] = useState<any>(null);
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
 
   const fetchMetrics = async () => {
     try {
-      setLoading(true);
       const res = await fetch("/api/admin/metrics");
       if (res.status === 401 || res.status === 403) {
         setUnauthorized(true);
@@ -70,8 +119,32 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    fetchMetrics();
-  }, []);
+    let ignore = false;
+    fetch("/api/admin/metrics")
+      .then((res) => {
+        if (res.status === 401 || res.status === 403) {
+          setUnauthorized(true);
+          setData(null);
+          return null;
+        }
+        setUnauthorized(false);
+        return res.json();
+      })
+      .then((json) => {
+        if (ignore || !json) return;
+        setData(json);
+        if (json.flights && json.flights.length > 0 && !selectedFlightNumber) {
+          setSelectedFlightNumber(json.flights[0].flightNumber);
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [selectedFlightNumber]);
 
   const handleSimulateFlight = async () => {
     setSimulating(true);
@@ -220,7 +293,7 @@ export default function AdminPage() {
               onChange={(e) => setSelectedFlightNumber(e.target.value)}
               className="flex-1 bg-slate-800 text-white text-xs p-3 rounded-xl border border-slate-700 focus:outline-none focus:border-teal-400"
             >
-              {(data?.flights || []).map((f: any) => (
+              {(data?.flights || []).map((f: AdminFlight) => (
                 <option key={f.id} value={f.flightNumber}>
                   {f.airline} {f.flightNumber} ({f.origin} → BOM {f.terminal}) - {f.status}
                 </option>
@@ -261,7 +334,7 @@ export default function AdminPage() {
           </h2>
 
           <div className="space-y-2 max-h-72 overflow-y-auto">
-            {(data?.pools || []).map((pool: any) => (
+            {(data?.pools || []).map((pool: AdminPool) => (
               <div
                 key={pool.id}
                 className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex items-center justify-between"
@@ -298,7 +371,7 @@ export default function AdminPage() {
 
           <div className="space-y-2">
             {(data?.incidents || []).length > 0 ? (
-              data.incidents.map((inc: any) => (
+              (data?.incidents || []).map((inc: AdminIncident) => (
                 <div
                   key={inc.id}
                   className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs space-y-1"
