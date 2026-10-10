@@ -30,16 +30,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Flight not found" }, { status: 404 });
     }
 
-    const generatedCode =
-      boardingPassCode ||
-      `BP-${flight.flightNumber.replace("-", "")}-${Math.floor(10 + Math.random() * 89)}${["A", "B", "C", "D", "E", "F"][Math.floor(Math.random() * 6)]}`;
-    const finalPnr = pnr || `PNR${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    const finalSeat = seatNumber || `${Math.floor(1 + Math.random() * 28)}${["A", "B", "C", "D", "E", "F"][Math.floor(Math.random() * 6)]}`;
-
     // Upsert verification record
     const existing = await prisma.passengerVerification.findFirst({
       where: { userId, flightId },
     });
+
+    const generatedCode =
+      boardingPassCode ||
+      existing?.boardingPassCode ||
+      `BP-${flight.flightNumber.replace("-", "")}-${Date.now().toString(36).slice(-4)}-${Math.floor(10 + Math.random() * 89)}${["A", "B", "C", "D", "E", "F"][Math.floor(Math.random() * 6)]}`;
+    const finalPnr = pnr || `PNR${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const finalSeat = seatNumber || `${Math.floor(1 + Math.random() * 28)}${["A", "B", "C", "D", "E", "F"][Math.floor(Math.random() * 6)]}`;
 
     let verification;
     if (existing) {

@@ -63,12 +63,15 @@ export default function MapPicker({
     const airportIcon = L.divIcon({
       className: "custom-airport-pin",
       html: `
-        <div style="background:#0f172a; color:#fff; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(0,0,0,0.3); border:2px solid #38bdf8;">
-          ✈️
+        <div style="position:relative; width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+          <div class="beacon-pulse" style="position:absolute; width:36px; height:36px; border-radius:50%; background:rgba(255,176,32,0.4); pointer-events:none;"></div>
+          <div style="background:#070A12; color:#FFB020; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(255,176,32,0.5); border:2px solid #FFB020; font-size:14px; position:relative; z-index:2;">
+            ✈
+          </div>
         </div>
       `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
     });
 
     L.marker([airportCoords.lat, airportCoords.lng], { icon: airportIcon })
@@ -80,14 +83,14 @@ export default function MapPicker({
 
     Object.values(MUMBAI_ZONES).forEach((zone) => {
       const isSelected = zone.id === selectedZone;
-      const pinColor = isSelected ? "#0d9488" : "#64748b";
-      const pinSize = isSelected ? 30 : 22;
+      const pinColor = isSelected ? "#2DE2C4" : "#8A94B2";
+      const pinSize = isSelected ? 32 : 22;
 
       const zoneIcon = L.divIcon({
         className: "custom-zone-pin",
         html: `
-          <div style="background:${pinColor}; color:#fff; width:${pinSize}px; height:${pinSize}px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.25); border:2px solid white; cursor:pointer;">
-            ${isSelected ? "✓" : "📍"}
+          <div style="background:${pinColor}; color:#070A12; width:${pinSize}px; height:${pinSize}px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; box-shadow:0 0 ${isSelected ? "14px #2DE2C4" : "4px rgba(0,0,0,0.5)"}; border:2px solid ${isSelected ? "#FFFFFF" : "#141C30"}; cursor:pointer; transition:transform 0.2s;">
+            ${isSelected ? "✓" : "●"}
           </div>
         `,
         iconSize: [pinSize, pinSize],
@@ -121,7 +124,7 @@ export default function MapPicker({
         const stopIcon = L.divIcon({
           className: "custom-stop-pin",
           html: `
-            <div style="background:#f59e0b; color:#fff; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.3); border:2px solid white;">
+            <div style="background:#FFB020; color:#070A12; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; box-shadow:0 0 10px rgba(255,176,32,0.6); border:2px solid #070A12;">
               #${stop.order}
             </div>
           `,
@@ -135,19 +138,19 @@ export default function MapPicker({
       });
 
       routeLayerRef.current = L.polyline(fullRoute, {
-        color: "#0d9488",
+        color: "#2DE2C4",
         weight: 4,
-        opacity: 0.85,
-        dashArray: "6, 6",
+        opacity: 0.9,
+        dashArray: "6, 8",
       }).addTo(map);
 
       map.fitBounds(L.latLngBounds(fullRoute), { padding: [30, 30] });
     } else if (routePoints.length > 1) {
-      // Single route line
+      // Single glowing route corridor
       routeLayerRef.current = L.polyline(routePoints, {
-        color: "#0d9488",
+        color: "#2DE2C4",
         weight: 4,
-        opacity: 0.8,
+        opacity: 0.85,
       }).addTo(map);
 
       map.fitBounds(L.latLngBounds(routePoints), { padding: [40, 40] });
@@ -159,11 +162,11 @@ export default function MapPicker({
   }, [terminal, selectedZone, destinationCoords, otherStops, onSelectZone]);
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100">
+    <div className="relative rounded-3xl overflow-hidden border border-[var(--surface-border)] shadow-md bg-[var(--surface)]">
       <div ref={mapContainerRef} style={{ width: "100%", height }} />
-      <div className="absolute top-2 left-2 z-20 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-700 shadow-xs border border-slate-200/80 flex items-center gap-1.5">
-        <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-        <span>BOM Route Corridor Map</span>
+      <div className="absolute top-3 left-3 z-20 glass-surface px-3 py-1 rounded-xl text-[11px] font-bold text-[var(--text)] shadow-sm border border-[var(--surface-border)] flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+        <span className="font-display">BOM Corridor Radar</span>
       </div>
     </div>
   );

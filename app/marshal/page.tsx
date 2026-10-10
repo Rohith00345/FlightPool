@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Navbar from "@/components/Navbar";
 import {
   Compass,
   CheckCircle2,
@@ -11,6 +12,9 @@ import {
   ArrowRight,
   Luggage,
 } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 interface PickupBay {
   id: string;
@@ -59,7 +63,6 @@ export default function MarshalDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -132,36 +135,40 @@ export default function MarshalDashboardPage() {
   const currentTermInfo = terminals.find((t) => t.code === selectedTerminal);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col font-sans">
+      <Navbar />
+
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header bar */}
-        <header className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+        <Card className="p-5 border-[var(--border)] bg-[var(--surface)] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Compass className="w-6 h-6 animate-spin-slow" />
+            <div className="w-12 h-12 rounded-2xl bg-[var(--primary)]/10 border border-[var(--primary)]/20 flex items-center justify-center text-[var(--primary)]">
+              <Compass className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight">Airport Marshal Station</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <h1 className="text-xl font-bold tracking-tight font-display text-[var(--foreground)]">
+                  Airport Marshal Station
+                </h1>
+                <Badge variant="glow" className="text-[10px] uppercase font-bold">
                   GROUND OPS
-                </span>
+                </Badge>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--muted)]">
                 Chhatrapati Shivaji Maharaj International Airport (BOM) • Bay Dispatch Control
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="flex bg-[var(--surface-2)] p-1 rounded-xl border border-[var(--border)]">
               <button
                 type="button"
                 onClick={() => setSelectedTerminal("T2")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                   selectedTerminal === "T2"
-                    ? "bg-amber-500 text-slate-950 shadow"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-[var(--primary)] text-black shadow"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
                 Terminal 2 (Sahar)
@@ -169,26 +176,26 @@ export default function MarshalDashboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedTerminal("T1")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                   selectedTerminal === "T1"
-                    ? "bg-amber-500 text-slate-950 shadow"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-[var(--primary)] text-black shadow"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
                 Terminal 1 (Santa Cruz)
               </button>
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setRefreshKey((k) => k + 1)}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
               title="Refresh Queue"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
+            </Button>
           </div>
-        </header>
+        </Card>
 
         {actionSuccess && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
@@ -204,27 +211,27 @@ export default function MarshalDashboardPage() {
           </div>
         )}
 
-        {/* Pickup Bays Grid */}
+        {/* Pickup Bays Grid (C6) */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <span>Designated Pickup Bays</span>
-            <span className="text-xs font-normal text-slate-500">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-2">
+            <span>Designated Pickup Bays (Bay A - D)</span>
+            <span className="font-normal text-[var(--muted)]">
               ({currentTermInfo?.bays.length || 0} active bays)
             </span>
           </h2>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             {currentTermInfo?.bays.map((bay) => (
-              <div
+              <Card
                 key={bay.id}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow"
+                className="p-3 border-[var(--border)] bg-[var(--surface)] flex flex-col items-center justify-center text-center shadow"
               >
-                <span className="text-xs text-slate-400 font-mono">BAY</span>
-                <span className="text-sm font-bold text-amber-400 mt-0.5">{bay.label}</span>
+                <span className="text-[10px] text-[var(--muted)] font-mono">BAY</span>
+                <span className="text-sm font-bold text-[var(--primary)] mt-0.5">{bay.label}</span>
                 <span className="mt-2 text-[10px] uppercase font-semibold tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                   Ready
                 </span>
-              </div>
+              </Card>
             ))}
           </div>
         </section>
@@ -232,46 +239,46 @@ export default function MarshalDashboardPage() {
         {/* Active Boarding Vehicles */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-2">
               <span>Vehicles in Bay & Boarding Queue</span>
-              <span className="text-xs font-normal text-slate-500">
+              <span className="font-normal text-[var(--muted)]">
                 ({activeTrips.length} active pools)
               </span>
             </h2>
           </div>
 
           {activeTrips.length === 0 ? (
-            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 text-center text-slate-400 space-y-2">
-              <Car className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-              <p className="font-medium text-slate-300">No active vehicles currently in pickup bays.</p>
-              <p className="text-xs text-slate-500">
+            <Card className="p-8 text-center text-[var(--muted)] border-[var(--border)] bg-[var(--surface)] space-y-2">
+              <Car className="w-10 h-10 mx-auto text-[var(--muted)] mb-2" />
+              <p className="font-medium text-[var(--foreground)]">No active vehicles currently in pickup bays.</p>
+              <p className="text-xs text-[var(--muted)]">
                 When passenger pools match and vehicles arrive at {selectedTerminal}, they will appear here automatically.
               </p>
-            </div>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {activeTrips.map((trip) => (
-                <div
+                <Card
                   key={trip.id}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4 hover:border-slate-700 transition"
+                  className="p-5 border-[var(--border)] bg-[var(--surface)] shadow-lg space-y-4 hover:border-[var(--muted)] transition"
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-amber-400">
+                        <span className="font-mono text-sm font-bold text-[var(--primary)]">
                           {trip.vehicle.licensePlate}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <Badge variant="outline" className="text-[10px] uppercase">
                           {trip.status}
-                        </span>
+                        </Badge>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="text-xs text-[var(--muted)] mt-0.5">
                         {trip.vehicle.color} {trip.vehicle.make} {trip.vehicle.model} • Driver: {trip.driver.name} (★ {trip.driver.rating})
                       </p>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-500 block uppercase font-mono">OTP Code</span>
+                      <span className="text-[10px] text-[var(--muted)] block uppercase font-mono">OTP Code</span>
                       <span className="font-mono font-bold text-emerald-400 text-sm tracking-wider">
                         {trip.otpCode}
                       </span>
@@ -279,9 +286,9 @@ export default function MarshalDashboardPage() {
                   </div>
 
                   {/* Riders List */}
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <p className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                  <div className="space-y-2 pt-2 border-t border-[var(--border)]">
+                    <p className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-[var(--accent)]" />
                       <span>Assigned Passengers ({trip.riders.length}/3)</span>
                     </p>
 
@@ -289,18 +296,18 @@ export default function MarshalDashboardPage() {
                       {trip.riders.map((rider) => (
                         <div
                           key={rider.id}
-                          className="bg-slate-950/70 rounded-xl p-2.5 flex items-center justify-between text-xs border border-slate-800/60"
+                          className="bg-[var(--surface-2)] rounded-xl p-2.5 flex items-center justify-between text-xs border border-[var(--border)]"
                         >
                           <div>
-                            <span className="font-medium text-slate-200">{rider.name}</span>
-                            <span className="text-slate-500 ml-1.5">({rider.destination})</span>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                            <span className="font-medium text-[var(--foreground)]">{rider.name}</span>
+                            <span className="text-[var(--muted)] ml-1.5">({rider.destination})</span>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--muted)]">
                               <span className="flex items-center gap-1">
-                                <Luggage className="w-3 h-3 text-amber-400" />
+                                <Luggage className="w-3 h-3 text-[var(--primary)]" />
                                 {rider.bags} bags
                               </span>
                               <span>•</span>
-                              <span className="text-indigo-400 font-mono">{rider.status}</span>
+                              <span className="text-[var(--accent)] font-mono">{rider.status}</span>
                             </div>
                           </div>
 
@@ -308,7 +315,7 @@ export default function MarshalDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleVerifyBoarding(rider.id)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition text-[11px]"
+                              className="px-2.5 py-1 rounded-lg bg-[var(--primary)] hover:opacity-90 text-black font-bold transition text-[11px]"
                             >
                               Verify Board
                             </button>
@@ -323,25 +330,25 @@ export default function MarshalDashboardPage() {
                   </div>
 
                   {/* Trip dispatch action */}
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-xs text-slate-400">
-                      Destination Cluster: <strong className="text-slate-200">{trip.cluster}</strong>
+                  <div className="pt-2 flex items-center justify-between border-t border-[var(--border)]">
+                    <span className="text-xs text-[var(--muted)]">
+                      Cluster: <strong className="text-[var(--foreground)]">{trip.cluster}</strong>
                     </span>
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
                       onClick={() => handleDispatchTrip(trip.id)}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow"
+                      className="gap-1.5 text-xs font-bold"
                     >
                       <span>Dispatch Bay</span>
                       <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           )}
         </section>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

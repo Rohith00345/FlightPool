@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { Car, CheckCircle, Navigation, RefreshCw, Lock } from "lucide-react";
 import { isClientDemoMode } from "@/lib/demo";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 interface DriverStop {
   memberId: string;
@@ -35,7 +38,6 @@ export default function DriverViewPage() {
   const [trips, setTrips] = useState<DriverTripItem[]>([]);
   void trips;
   const [loading, setLoading] = useState(true);
-  void loading;
   const [unauthorized, setUnauthorized] = useState(false);
   const [activeTrip, setActiveTrip] = useState<DriverActiveTrip | null>(null);
 
@@ -51,7 +53,6 @@ export default function DriverViewPage() {
       const data = await res.json();
       if (data.trips && data.trips.length > 0) {
         setTrips(data.trips);
-        // Load details of first trip
         loadTripDetails(data.trips[0].id);
       }
     } catch (e) {
@@ -141,169 +142,209 @@ export default function DriverViewPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-between">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col justify-between font-sans">
       <Navbar />
 
-      <main className="w-full max-w-md mx-auto flex-1 p-4 pb-16 space-y-4">
+      <main className="w-full max-w-lg mx-auto flex-1 p-4 pb-16 space-y-4">
         {unauthorized && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 flex flex-col items-center justify-between gap-3 shadow-sm text-center">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 flex flex-col items-center justify-between gap-3 shadow-sm text-center">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
               <Lock className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-900">Driver Sign-In Required (RBAC)</h4>
-              <p className="text-xs text-slate-500 mt-1">Access to airport queue assignments and trip manifests requires active driver authorization.</p>
+              <h4 className="text-sm font-bold text-[var(--foreground)]">Driver Sign-In Required (RBAC)</h4>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Access to airport queue assignments and trip manifests requires active driver authorization.
+              </p>
             </div>
             {isClientDemoMode() ? (
-              <button
+              <Button
                 onClick={handleDriverLogin}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition mt-1"
+                variant="primary"
+                size="sm"
+                className="w-full text-xs font-bold"
               >
                 Sign In as Ramesh Shinde (Demo Persona)
-              </button>
+              </Button>
             ) : (
-              <p className="text-xs text-amber-800 font-semibold mt-1">Production Mode Active: Driver hardware/token auth required.</p>
+              <p className="text-xs text-amber-400 font-semibold mt-1">
+                Production Mode Active: Driver hardware/token auth required.
+              </p>
             )}
           </div>
         )}
 
         {/* Driver Header Card */}
-        <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-sm">
+        <Card className="p-5 border-[var(--border)] bg-[var(--surface)] shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-teal-500 rounded-2xl flex items-center justify-center text-white">
+              <div className="w-12 h-12 bg-[var(--primary)] text-black rounded-2xl flex items-center justify-center font-bold">
                 <Car className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="font-bold text-base">Driver Operations Portal</h1>
-                <p className="text-xs text-slate-400">Mumbai Airport Hub (BOM)</p>
+                <h1 className="font-bold text-base font-display text-[var(--foreground)]">
+                  Driver Flight-Deck Portal
+                </h1>
+                <p className="text-xs text-[var(--muted)] font-mono">BOM Terminal Hub • Assigned Bay P4</p>
               </div>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={fetchTrips}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300"
               title="Refresh"
             >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
-        </div>
+        </Card>
 
         {activeTrip ? (
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
-            {/* Status and Payout Overview */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full">
-                  Status: {activeTrip.status}
-                </span>
-                <p className="font-bold text-base text-slate-900 mt-1">
-                  Trip #{activeTrip.id.slice(-6)}
-                </p>
+          <div className="space-y-4">
+            {/* Earnings Card (C6) */}
+            <Card className="p-5 border-[var(--border)] bg-[var(--surface)] shadow-lg space-y-3">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div>
+                  <Badge variant="primary" className="text-[10px] font-mono">
+                    Status: {activeTrip.status}
+                  </Badge>
+                  <p className="font-bold text-base text-[var(--foreground)] mt-1 font-mono">
+                    Trip #{activeTrip.id.slice(-6)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-[var(--muted)] uppercase block font-semibold">
+                    Net Driver Payout (85%)
+                  </span>
+                  <span className="text-2xl font-black font-mono text-emerald-400">
+                    ₹{activeTrip.driverPayout}
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400 block">Your Payout (85%)</span>
-                <span className="text-xl font-black text-emerald-600">
-                  ₹{activeTrip.driverPayout}
-                </span>
+
+              {/* Payout Breakdown */}
+              <div className="bg-[var(--surface-2)] p-3.5 rounded-xl border border-[var(--border)] text-xs space-y-1.5">
+                <div className="flex justify-between text-[var(--muted)]">
+                  <span>Gross Passenger Fares:</span>
+                  <span className="font-mono text-[var(--foreground)]">₹{activeTrip.totalFare || 740}</span>
+                </div>
+                <div className="flex justify-between text-[var(--muted)]">
+                  <span>Platform Fee (15%):</span>
+                  <span className="font-mono text-[var(--danger)]">-₹{activeTrip.platformFee || 111}</span>
+                </div>
+                <div className="flex justify-between font-bold text-[var(--foreground)] border-t border-[var(--border)] pt-1.5 text-xs">
+                  <span>Net Ledger Deposit:</span>
+                  <span className="font-mono text-emerald-400">₹{activeTrip.driverPayout} (Pending Confirmation)</span>
+                </div>
               </div>
-            </div>
+            </Card>
 
-            {/* OTP Code Notice */}
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between text-xs text-amber-900">
-              <span>Required Rider OTP at Terminal:</span>
-              <span className="font-mono font-bold text-base bg-amber-200 px-2.5 py-0.5 rounded-lg text-amber-950">
-                {activeTrip.otpCode}
-              </span>
-            </div>
+            {/* OTP Entry Card (C6) */}
+            <Card className="p-4 border-[var(--border)] bg-[var(--surface)] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                  Airport Bay Pickup OTP
+                </span>
+                <span className="text-[10px] text-[var(--accent)] font-semibold">Verify Rider at P4</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 py-1">
+                {(activeTrip.otpCode || "1429").split("").map((digit, i) => (
+                  <span
+                    key={i}
+                    className="w-10 h-12 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--primary)] font-mono font-bold text-xl flex items-center justify-center shadow-inner"
+                  >
+                    {digit}
+                  </span>
+                ))}
+              </div>
+            </Card>
 
-            {/* Ordered Route Stops */}
-            <div>
-              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Optimized Route Stops:
+            {/* Route Sequence Steps (C6) */}
+            <Card className="p-5 border-[var(--border)] bg-[var(--surface)] space-y-3">
+              <p className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+                Drop-off Sequence ({activeTrip.stops.length} Stops):
               </p>
               <div className="space-y-2">
+                <div className="p-3 bg-[var(--surface-2)] rounded-xl text-xs flex items-center gap-3 border border-[var(--border)]">
+                  <div className="w-7 h-7 rounded-full bg-[var(--primary)] text-black font-bold flex items-center justify-center text-xs">
+                    P
+                  </div>
+                  <div>
+                    <p className="font-bold text-[var(--foreground)]">BOM Terminal Bay P4</p>
+                    <p className="text-[11px] text-[var(--muted)]">Passenger Boarding & Luggage Stowing</p>
+                  </div>
+                </div>
+
                 {activeTrip.stops.map((stop: DriverStop) => (
                   <div
                     key={stop.memberId}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs"
+                    className="p-3 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl flex items-center justify-between text-xs"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-xs">
                         {stop.dropoffOrder}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900">{stop.riderName}</p>
-                        <p className="text-[11px] text-slate-500">{stop.destinationAddress}</p>
+                        <p className="font-bold text-[var(--foreground)]">{stop.riderName}</p>
+                        <p className="text-[11px] text-[var(--muted)]">{stop.destinationAddress}</p>
                       </div>
                     </div>
-                    <span className="font-semibold text-slate-700 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                    <span className="font-mono font-bold text-emerald-400 bg-[var(--surface)] px-2 py-1 rounded-lg border border-[var(--border)]">
                       ₹{stop.poolFare}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Payout Breakdown */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-1.5">
-              <div className="flex justify-between text-slate-600">
-                <span>Total Passenger Fares</span>
-                <span>₹{activeTrip.totalFare}</span>
-              </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Platform Commission (15%)</span>
-                <span>-₹{activeTrip.platformFee}</span>
-              </div>
-              <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-1.5 text-sm">
-                <span>Net Driver Payout</span>
-                <span className="text-emerald-700">₹{activeTrip.driverPayout}</span>
-              </div>
-            </div>
+            </Card>
 
             {/* Driver Progression CTAs */}
-            <div className="pt-1">
+            <div className="pt-2">
               {activeTrip.status === "ASSIGNED" && (
-                <button
+                <Button
                   onClick={() => handleUpdateTrip("START_PICKUP")}
-                  className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-4 text-sm font-bold gap-2 shadow-lg"
+                  size="lg"
                 >
                   <Navigation className="w-4 h-4" />
-                  <span>En Route to Terminal Pickup (P4)</span>
-                </button>
+                  <span>En Route to Terminal Bay (P4)</span>
+                </Button>
               )}
 
               {activeTrip.status === "EN_ROUTE_PICKUP" && (
-                <button
+                <Button
                   onClick={() => handleUpdateTrip("START_TRIP")}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md flex items-center justify-center gap-2"
+                  variant="primary"
+                  className="w-full py-4 text-sm font-bold gap-2 shadow-lg"
+                  size="lg"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  <span>All Passengers Boarded • Start Trip</span>
-                </button>
+                  <span>Passengers Boarded • Start Trip</span>
+                </Button>
               )}
 
               {activeTrip.status === "IN_TRANSIT" && (
-                <button
+                <Button
                   onClick={() => handleUpdateTrip("COMPLETE_TRIP")}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md flex items-center justify-center gap-2"
+                  variant="success"
+                  className="w-full py-4 text-sm font-bold gap-2 shadow-lg"
+                  size="lg"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  <span>Complete All Drop-offs & Capture Payment</span>
-                </button>
+                  <span>Complete Drop-offs & Finalize Trip</span>
+                </Button>
               )}
 
               {activeTrip.status === "COMPLETED" && (
-                <div className="text-center py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200">
-                  ✓ Trip Completed • Payout ₹{activeTrip.driverPayout} Credited
+                <div className="text-center py-3 text-xs font-semibold text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                  ✓ Trip Completed • Payout ₹{activeTrip.driverPayout} Logged to Driver Wallet
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-3xl p-8 text-center text-slate-400 border border-slate-200">
-            {loading ? "Loading active driver trips..." : "No active trip assigned yet."}
-          </div>
+          <Card className="p-8 text-center text-[var(--muted)] border-[var(--border)] bg-[var(--surface)]">
+            {loading ? "Loading active driver trip manifest..." : "No active trip currently dispatched."}
+          </Card>
         )}
       </main>
     </div>

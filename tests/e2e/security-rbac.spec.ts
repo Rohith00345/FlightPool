@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
 test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
   test("1. Anonymous request to /api/admin/metrics is rejected with 401/403", async ({ request }) => {
@@ -717,7 +718,9 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
     await expect(restrictedNotice).toBeVisible();
   });
 
-  test("26. Denial tests for match, solo, stream, and consent-pricing routes", async ({ request }) => {
+  test("26. Denial tests for match, solo, stream, and consent-pricing routes", async ({ request, playwright }) => {
+    const anonRequest = await playwright.request.newContext();
+
     // 1. Authenticate users
     const riderALogin = await request.post("/api/auth/otp", {
       data: { identifier: "+919811559901", otp: "123456", name: "Denial Rider A", role: "RIDER" },
@@ -746,7 +749,7 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
 
     // A. /api/pools/match
     // Anonymous -> 401
-    const matchAnon = await request.post("/api/pools/match", {
+    const matchAnon = await anonRequest.post("/api/pools/match", {
       data: { flightId: flight.id, terminal: "T2" },
     });
     expect(matchAnon.status()).toBe(401);
@@ -760,7 +763,7 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
 
     // B. /api/pools/solo
     // Anonymous -> 401
-    const soloAnon = await request.post("/api/pools/solo", {
+    const soloAnon = await anonRequest.post("/api/pools/solo", {
       data: { userId: userB.id, rideRequestId: rideB.id },
     });
     expect(soloAnon.status()).toBe(401);
@@ -789,7 +792,7 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
 
     // C. /api/trips/[id]/stream
     // Anonymous -> 401
-    const streamAnon = await request.get(`/api/trips/${tripB.id}/stream`);
+    const streamAnon = await anonRequest.get(`/api/trips/${tripB.id}/stream`);
     expect(streamAnon.status()).toBe(401);
 
     // Cross-user (Rider A attempting to stream Rider B's trip) -> 403
@@ -799,7 +802,6 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
     expect(streamCross.status()).toBe(403);
 
     // D. /api/pools/[id]/consent-pricing
-    const { prisma } = await import("../../lib/prisma");
     const testQuote = await prisma.fareQuote.create({
       data: {
         userId: userB.id,
@@ -815,7 +817,7 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
 
     try {
       // Anonymous -> 401
-      const consentAnon = await request.post(`/api/pools/pool_test/consent-pricing`, {
+      const consentAnon = await anonRequest.post(`/api/pools/pool_test/consent-pricing`, {
         data: { fareQuoteId: testQuote.id, accepted: true },
       });
       expect(consentAnon.status()).toBe(401);
