@@ -47,6 +47,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Safety constraint: rider can leave freely without penalty if trip hasn't started or driver unassigned
+    if (member.pool.status === "COMPLETED" || member.pool.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: `Cannot leave pool in terminal status '${member.pool.status}'.` },
+        { status: 400 }
+      );
+    }
+
     if (member.pool.trip && member.pool.trip.status === "IN_TRANSIT") {
       return NextResponse.json(
         { error: "Trip is already in transit. Cannot leave pool." },

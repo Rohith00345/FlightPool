@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { defaultPaymentProvider } from "@/lib/payments/provider";
 import { getSessionFromRequest } from "@/lib/auth";
+import { transitionPoolStatus, isValidTransition, PoolStatus } from "@/lib/pool-engine";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Rider is not a member of this pool" },
         { status: 404 }
+      );
+    }
+
+    // State machine check: Pool must be in FORMING or CONFIRMED state
+    const currentPoolStatus = member.pool.status as PoolStatus;
+    if (currentPoolStatus !== "FORMING" && currentPoolStatus !== "CONFIRMED") {
+      return NextResponse.json(
+        {
+          error: `Illegal pool state transition: Cannot confirm pool in '${currentPoolStatus}' status.`,
+          currentStatus: currentPoolStatus,
+        },
+        { status: 400 }
       );
     }
 
@@ -90,11 +103,18 @@ export async function POST(req: NextRequest) {
 
     let trip = null;
     if (confirmedCount === updatedMembers.length || confirmedCount >= 2) {
-      // Mark pool as confirmed
-      await prisma.pool.update({
-        where: { id: poolId },
-        data: { status: "CONFIRMED" },
-      });
+      // Transition pool state using atomic state machine transition
+      if (member.pool.status === "FORMING" && isValidTransition("FORMING", "CONFIRMED")) {
+        try {
+          await transitionPoolStatus(poolId, member.pool.version, "CONFIRMED");
+        } catch {
+          // If already concurrently updated, ensure it is CONFIRMED
+          await prisma.pool.update({
+            where: { id: poolId },
+            data: { status: "CONFIRMED" },
+          });
+        }
+      }
 
       // Update all confirmed ride requests
       await prisma.rideRequest.updateMany({

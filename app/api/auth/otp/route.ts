@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { checkOtpRateLimit, consumeOtpInDatabase, signSessionToken, COOKIE_NAME, SessionPayload } from "@/lib/auth";
+import {
+  checkOtpRateLimit,
+  createOtpRequestInDatabase,
+  consumeOtpInDatabase,
+  signSessionToken,
+  hashOtp,
+  COOKIE_NAME,
+  SessionPayload,
+} from "@/lib/auth";
 import { isDemoMode } from "@/lib/demo";
+import { getOtpProvider } from "@/lib/otp-provider";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +25,8 @@ export async function POST(req: NextRequest) {
     }
 
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
-    // Rate limiting: Max 5 attempts per 10 minutes (backed by PostgreSQL OtpRequest table)
-    const rateCheck = await checkOtpRateLimit(identifier, ip, otp);
+    // Rate limiting: Count by phone number and by IP
+    const rateCheck = await checkOtpRateLimit(identifier, ip);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many OTP attempts. Please wait 10 minutes before trying again." },
@@ -26,10 +35,14 @@ export async function POST(req: NextRequest) {
     }
 
     const demo = isDemoMode();
+    const provider = getOtpProvider();
 
     // Phase 1 / Auth: OTP request vs verification
     if (!otp) {
-      // Step 1: Send OTP request
+      // Step 1: Generate OTP, store in database, and dispatch via provider
+      const generatedCode = await createOtpRequestInDatabase(identifier, ip);
+      await provider.sendOtp(identifier, generatedCode);
+
       return NextResponse.json({
         success: true,
         message: demo
@@ -42,23 +55,51 @@ export async function POST(req: NextRequest) {
 
     // Step 2: Verify OTP
     if (!demo) {
-      // When demo mode is OFF, dev OTP 123456 is strictly rejected
-      return NextResponse.json(
-        { error: "Production mode active: Live SMS verification provider required." },
-        { status: 403 }
-      );
-    }
+      if (otp === "123456") {
+        return NextResponse.json(
+          { error: "Production mode active: Live SMS verification provider required." },
+          { status: 403 }
+        );
+      }
+      // In production mode, check the submitted OTP hash against the database
+      const submittedHash = hashOtp(otp);
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const validRecord = await prisma.otpRequest.findFirst({
+        where: {
+          phone: identifier,
+          codeHash: submittedHash,
+          consumedAt: null,
+          createdAt: { gte: tenMinutesAgo },
+          purpose: "login",
+        },
+      });
 
-    if (otp !== "123456") {
-      return NextResponse.json(
-        { error: "Invalid OTP code. Please enter 123456" },
-        { status: 400 }
-      );
+      if (!validRecord) {
+        return NextResponse.json(
+          { error: "Production mode active: Live SMS verification provider required." },
+          { status: 403 }
+        );
+      }
+    } else {
+      if (otp !== "123456") {
+        return NextResponse.json(
+          { error: "Invalid OTP code. Please enter 123456" },
+          { status: 400 }
+        );
+      }
     }
 
     const isEmail = identifier.includes("@");
     const phone = isEmail ? "+9198" + Math.floor(10000000 + Math.random() * 90000000) : identifier;
     const email = isEmail ? identifier : null;
+
+    // Check if phone or email is in ADMIN_PHONES environment list
+    const adminPhones = (process.env.ADMIN_PHONES || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const isDesignatedAdmin = adminPhones.includes(phone) || (email ? adminPhones.includes(email) : false);
+    const initialRole = isDesignatedAdmin ? "ADMIN" : (role || "RIDER");
 
     let user = await prisma.user.findFirst({
       where: {
@@ -77,17 +118,24 @@ export async function POST(req: NextRequest) {
           name: name || (isEmail ? identifier.split("@")[0] : "Mumbai Traveler"),
           gender: gender || "PREFER_NOT_TO_SAY",
           genderVerified: gender === "FEMALE",
-          role: role || "RIDER",
+          role: initialRole,
         },
       });
-    } else if (gender && (user.gender === "UNSPECIFIED" || user.gender === "PREFER_NOT_TO_SAY")) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          gender,
-          genderVerified: gender === "FEMALE" ? true : user.genderVerified,
-        },
-      });
+    } else {
+      if (isDesignatedAdmin && user.role !== "ADMIN") {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: "ADMIN" },
+        });
+      } else if (gender && (user.gender === "UNSPECIFIED" || user.gender === "PREFER_NOT_TO_SAY")) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            gender,
+            genderVerified: gender === "FEMALE" ? true : user.genderVerified,
+          },
+        });
+      }
     }
 
     await consumeOtpInDatabase(user.phone);

@@ -2,9 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { matchRiderRequests, RiderRequest } from "@/lib/matching";
 import { calculatePoolPricing } from "@/lib/pricing";
+import { getSessionFromRequest } from "@/lib/auth";
+
+const matchRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 export async function POST(req: NextRequest) {
   try {
+    const session = getSessionFromRequest(req);
+    const cronHeader = req.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    const isCron = Boolean(cronSecret && cronHeader === `Bearer ${cronSecret}`);
+
+    if (!session && !isCron) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (!isCron && session && !["RIDER", "MARSHAL", "ADMIN"].includes(session.role)) {
+      return NextResponse.json(
+        { error: "Forbidden: Rider, Marshal, or Admin role required." },
+        { status: 403 }
+      );
+    }
+
+    // Rate limiting (max 10 calls / 60 seconds per user)
+    const rateLimitKey = session ? session.userId : "cron";
+    const now = Date.now();
+    const rateData = matchRateLimitMap.get(rateLimitKey);
+    if (rateData && now < rateData.resetAt) {
+      if (rateData.count >= 10) {
+        return NextResponse.json(
+          { error: "Rate limit exceeded. Please wait before triggering pool matching again." },
+          { status: 429 }
+        );
+      }
+      rateData.count++;
+    } else {
+      matchRateLimitMap.set(rateLimitKey, { count: 1, resetAt: now + 60000 });
+    }
+
     const body = await req.json();
     const { flightId, terminal } = body;
 

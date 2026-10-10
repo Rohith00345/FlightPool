@@ -1,0 +1,16 @@
+{
+  "name": "FlightPool • Mumbai Airport Cab Sharing",
+  "short_name": "FlightPool",
+  "description": "Share airport cabs at Mumbai Airport (BOM T1 & T2) with verified co-passengers and save up to 50%.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070A12",
+  "theme_color": "#070A12",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

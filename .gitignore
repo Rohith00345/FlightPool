@@ -24,6 +24,7 @@ test-results/
 # misc
 .DS_Store
 *.pem
+*.zip
 
 # debug
 npm-debug.log*
@@ -46,4 +47,9 @@ next-env.d.ts
 *.db
 *.db-journal
 prisma/dev.db
+
+# logs and reports
+*.log
+playwright-report/
+blob-report/
 

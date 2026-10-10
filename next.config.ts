@@ -20,12 +20,17 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https: blob:",
-              "font-src 'self' data:",
-              "connect-src 'self' https: ws: wss:",
+              process.env.NODE_ENV === "production"
+                ? "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com"
+                : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "connect-src 'self' https://*.tile.openstreetmap.org https://tile.openstreetmap.org https://api.razorpay.com ws: wss:",
+              "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
               "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
             ].join("; "),
           },
           {

@@ -19,7 +19,11 @@ export async function POST(
     }
 
     const session = getSessionFromRequest(req);
-    if (session && session.role !== "ADMIN" && session.userId !== raterUserId) {
+    if (!session) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (session.role !== "ADMIN" && session.userId !== raterUserId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot submit rating on behalf of another user" },
         { status: 403 }
@@ -54,6 +58,20 @@ export async function POST(
         comment: comment || null,
       },
     });
+
+    if (trip.driverId) {
+      const driverRatings = await prisma.rating.findMany({
+        where: { trip: { driverId: trip.driverId } },
+        select: { score: true },
+      });
+      if (driverRatings.length > 0) {
+        const avg = driverRatings.reduce((sum, r) => sum + r.score, 0) / driverRatings.length;
+        await prisma.driver.update({
+          where: { id: trip.driverId },
+          data: { rating: Math.round(avg * 10) / 10 },
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,

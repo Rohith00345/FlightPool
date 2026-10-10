@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     });
 
     if (!flight) {
-      // Pick any flight
       flight = await prisma.flight.findFirst({
         include: {
           rideRequests: {
@@ -47,11 +46,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No flights found to simulate" }, { status: 404 });
     }
 
+    const normalizedTerminal: "T1" | "T2" = flight.terminal === "T1" ? "T1" : "T2";
+
+    // B2: Idempotency per flight: if flight already has active FORMING or CONFIRMED pools, do not create duplicate pools
+    const existingActivePools = await prisma.pool.findMany({
+      where: {
+        targetFlightId: flight.id,
+        status: { in: ["FORMING", "CONFIRMED"] },
+      },
+      include: {
+        members: true,
+        driver: true,
+        vehicle: true,
+      },
+    });
+
+    if (existingActivePools.length > 0) {
+      return NextResponse.json({
+        success: true,
+        idempotent: true,
+        message: `Flight ${flight.flightNumber} simulation is idempotent: already active with ${existingActivePools.length} pool(s).`,
+        terminal: normalizedTerminal,
+        passengersProcessed: existingActivePools.reduce((sum, p) => sum + p.members.length, 0),
+        newPoolsFormed: 0,
+        activePoolsCount: existingActivePools.length,
+      });
+    }
+
     // 1. Mark flight as LANDED
     await prisma.flight.update({
       where: { id: flight.id },
       data: {
         status: "LANDED",
+        terminal: normalizedTerminal,
         arrivalTime: new Date(),
       },
     });
@@ -61,6 +88,7 @@ export async function POST(req: NextRequest) {
       where: { flightId: flight.id },
       data: {
         readyTime: new Date(),
+        readyAt: new Date(),
         status: "POOLING",
       },
     });
@@ -95,6 +123,7 @@ export async function POST(req: NextRequest) {
             luggageCount: d.bags,
             womenOnly: !!d.womenOnly,
             readyTime: new Date(),
+            readyAt: new Date(),
             status: "POOLING",
           },
         });
@@ -117,7 +146,7 @@ export async function POST(req: NextRequest) {
       flightId: flight.id,
       flightNumber: flight.flightNumber,
       flightArrivalTime: flight.arrivalTime,
-      terminal: flight.terminal as "T1" | "T2",
+      terminal: normalizedTerminal,
       destinationZone: r.destinationZone,
       destinationAddress: r.destinationAddress,
       destinationCoords: { lat: r.destinationLat, lng: r.destinationLng },
@@ -125,6 +154,7 @@ export async function POST(req: NextRequest) {
       womenOnly: r.womenOnly,
       gender: r.user.gender,
       readyTime: r.readyTime,
+      readyAt: r.readyAt,
       status: r.status,
     }));
 
@@ -136,26 +166,50 @@ export async function POST(req: NextRequest) {
       flightWindowMinutes: 30,
     });
 
-    const drivers = await prisma.driver.findMany({
-      where: { isAvailable: true },
+    // B2: Prevent one driver being in two overlapping active pools
+    // 1. Identify all drivers currently assigned to active pools (FORMING, CONFIRMED, DISPATCHED)
+    const occupiedPools = await prisma.pool.findMany({
+      where: {
+        status: { in: ["FORMING", "CONFIRMED", "DISPATCHED"] },
+        driverId: { not: null },
+      },
+      select: { driverId: true },
+    });
+    const occupiedDriverIds = new Set(
+      occupiedPools.map((p) => p.driverId).filter((id): id is string => Boolean(id))
+    );
+
+    // 2. Fetch available drivers excluding anyone already occupied in an active pool
+    const availableDrivers = await prisma.driver.findMany({
+      where: {
+        isAvailable: true,
+        id: { notIn: Array.from(occupiedDriverIds) },
+      },
       include: { vehicle: true },
     });
 
     let newPoolsFormed = 0;
+    let driverCursor = 0;
+
     for (let i = 0; i < matchResult.matchedPools.length; i++) {
       const matched = matchResult.matchedPools[i];
-      const assignedDriver = drivers[i % drivers.length];
+      // Allocate each free driver at most once
+      const assignedDriver = driverCursor < availableDrivers.length ? availableDrivers[driverCursor++] : null;
+      if (assignedDriver) {
+        occupiedDriverIds.add(assignedDriver.id);
+      }
 
       const pool = await prisma.pool.create({
         data: {
           targetFlightId: flight.id,
           destinationCluster: matched.destinationCluster,
-          terminal: matched.terminal,
+          terminal: matched.terminal === "T1" ? "T1" : "T2",
           status: "FORMING",
           maxDetourMinutes: 20,
           waitCapExpiry: new Date(Date.now() + 15 * 60 * 1000),
           vehicleId: assignedDriver?.vehicleId || null,
           driverId: assignedDriver?.id || null,
+          version: 1,
         },
       });
       newPoolsFormed++;
@@ -198,35 +252,33 @@ export async function POST(req: NextRequest) {
     try {
       await prisma.auditLog.create({
         data: {
-          actorId: auth.session.userId,
-          action: "SIMULATE_FLIGHT_LANDING",
+          actorId: auth.session?.userId || "admin",
+          action: "SIMULATE_FLIGHT",
           entityType: "FLIGHT",
-          entityId: flight.flightNumber,
+          entityId: flight.id,
           after: JSON.stringify({
             flightNumber: flight.flightNumber,
-            airline: flight.airline,
-            terminal: flight.terminal,
-            newPoolsFormed,
-            passengersProcessed: unassigned.length,
+            terminal: normalizedTerminal,
+            passengersMatched: riderRequests.length,
+            poolsFormed: newPoolsFormed,
           }),
         },
       });
-    } catch (auditErr) {
-      console.warn("Failed to create audit log:", auditErr);
+    } catch {
+      // Non-blocking audit log
     }
 
     return NextResponse.json({
       success: true,
-      message: `Flight ${flight.airline} ${flight.flightNumber} landed successfully!`,
-      flightNumber: flight.flightNumber,
-      terminal: flight.terminal,
+      message: `Flight ${flight.flightNumber} simulated successfully at Terminal ${normalizedTerminal}.`,
+      terminal: normalizedTerminal,
+      passengersProcessed: riderRequests.length,
       newPoolsFormed,
-      passengersProcessed: unassigned.length,
     });
   } catch (error: unknown) {
     console.error("Flight simulation error:", error);
     return NextResponse.json(
-      { error: "Failed to simulate flight landing", details: String(error) },
+      { error: "Simulation failed", details: String(error) },
       { status: 500 }
     );
   }

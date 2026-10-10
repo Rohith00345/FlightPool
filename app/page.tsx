@@ -9,38 +9,51 @@ import ShareTripModal from "@/components/ShareTripModal";
 import RatingModal from "@/components/RatingModal";
 import { MUMBAI_ZONES } from "@/lib/geo";
 import { isClientDemoMode } from "@/lib/demo";
+import { Language, TRANSLATIONS } from "@/lib/i18n";
+import {
+  getGamificationState,
+  GamificationState,
+  GATE_TRIVIA_QUESTIONS,
+} from "@/lib/gamification/provider";
 import {
   Plane,
   CheckCircle2,
   Clock,
-  Users,
   Luggage,
-  Shield,
-  Sparkles,
-  Phone,
   ArrowRight,
-  LogOut,
   RefreshCw,
-  Info,
   Car,
-  ChevronRight,
   Search,
   Check,
-  MapPin,
   Share2,
   AlertTriangle,
   QrCode,
   ShieldCheck,
-  Star,
-  Navigation,
   Lock,
+  Sparkles,
+  Award,
+  Trophy,
+  HelpCircle,
+  Sliders,
+  User,
+  History,
 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { Slider } from "@/components/ui/Slider";
+import { Progress } from "@/components/ui/Progress";
+import { Ring } from "@/components/ui/Ring";
+import { Stepper } from "@/components/ui/Stepper";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { useTheme } from "next-themes";
 
 // Dynamically import MapPicker without SSR for Leaflet
 const MapPicker = dynamic(() => import("@/components/MapPicker"), {
   ssr: false,
   loading: () => (
-    <div className="h-64 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs border border-slate-200 animate-pulse">
+    <div className="h-64 rounded-2xl bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)] text-xs border border-[var(--surface-border)] animate-pulse">
       Loading Mumbai Corridor Map...
     </div>
   ),
@@ -65,10 +78,69 @@ interface FlightItem {
   activeRequestsCount: number;
 }
 
+interface PoolMember {
+  userId: string;
+  name: string;
+  maskedAddress?: string;
+  luggageCount?: number;
+  gender?: string;
+  destinationZone?: string;
+}
+
+interface PoolStop {
+  memberId: string;
+  dropoffOrder: number;
+  riderName?: string;
+  destinationAddress?: string;
+  destinationZone?: string;
+}
+
+interface PoolVehicle {
+  model?: string;
+  licensePlate?: string;
+}
+
+interface PoolDriver {
+  name?: string;
+}
+
+interface PoolTrip {
+  id?: string;
+  status?: string;
+  otpCode?: string;
+}
+
+interface PoolDetails {
+  id: string;
+  status?: string;
+  isWaitCapExpired?: boolean;
+  destinationCluster?: string;
+  members: PoolMember[];
+  stops?: PoolStop[];
+  vehicle?: PoolVehicle;
+  driver?: PoolDriver;
+  trip?: PoolTrip;
+}
+
+interface ActiveRideRequest {
+  id: string;
+  status: string;
+  destinationZone?: string;
+  isWaitCapExpired?: boolean;
+}
+
 export default function Home() {
   const demoMode = isClientDemoMode();
+  const { theme, setTheme } = useTheme();
 
-  // Step in Wizard: "AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE"
+  // Language & i18n
+  const [language, setLanguage] = useState<Language>("en");
+  const t = TRANSLATIONS[language];
+
+  // Active Bottom Nav Tab (Mobile 4-tab: "ride", "rewards", "trips", "profile")
+  const [activeTab, setActiveTab] = useState<"ride" | "rewards" | "trips" | "profile">("ride");
+
+  // Step in Ride Wizard: "AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE"
   const [step, setStep] = useState<"AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE">("AUTH");
 
   // User State
@@ -76,8 +148,9 @@ export default function Home() {
   const [phoneInput, setPhoneInput] = useState(demoMode ? "+919810100001" : "");
   const [nameInput, setNameInput] = useState(demoMode ? "Aarav Sharma" : "");
   const [genderInput, setGenderInput] = useState("MALE");
-  const [otpInput, setOtpInput] = useState("");
+  const [otpInput, setOtpInput] = useState(demoMode ? "123456" : "");
   const [authError, setAuthError] = useState("");
+  const [showDemoSelector, setShowDemoSelector] = useState(false);
 
   // Flight Selection
   const [flights, setFlights] = useState<FlightItem[]>([]);
@@ -90,24 +163,21 @@ export default function Home() {
   const [pnrCode, setPnrCode] = useState("PNR894");
   const [seatCode, setSeatCode] = useState("12A");
   const [isVerified, setIsVerified] = useState(false);
+  void isVerified;
 
   // Destination & Ride Preferences
   const [selectedZone, setSelectedZone] = useState("Thane");
   const [selectedAddress, setSelectedAddress] = useState("Hiranandani Estate, Ghodbunder Rd");
   const [luggageCount, setLuggageCount] = useState(1);
   const [womenOnly, setWomenOnly] = useState(false);
-  const [estimates, setEstimates] = useState<{
-    soloFare: number;
-    estimatedPoolFare: number;
-    estimatedSavings: number;
-    savingsPct: number;
-  } | null>(null);
+
+  // Wait-vs-Save Slider (0 to 100, where 0 is minimum wait and 100 is maximum savings)
+  const [waitSaveRatio, setWaitSaveRatio] = useState(50);
 
   // Live Ride & Pool State
-  const [rideStatus, setRideStatus] = useState<string>("SEARCHING"); // "SEARCHING" | "POOL_FORMING" | "WAIT_CAP_EXPIRED" | "POOL_CONFIRMED" | "DRIVER_ASSIGNED" | "ON_TRIP" | "COMPLETED"
-  const [poolData, setPoolData] = useState<any>(null);
-  const [activeRequest, setActiveRequest] = useState<any>(null);
-  const [coRidersCount, setCoRidersCount] = useState<number>(0);
+  const [rideStatus, setRideStatus] = useState<string>("SEARCHING");
+  const [poolData, setPoolData] = useState<PoolDetails | null>(null);
+  const [activeRequest, setActiveRequest] = useState<ActiveRideRequest | null>(null);
   const [loadingAction, setLoadingAction] = useState<boolean>(false);
 
   // Modals
@@ -115,6 +185,51 @@ export default function Home() {
   const [showPayment, setShowPayment] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showRating, setShowRating] = useState(false);
+
+  // Game Layer (Mock state for demo mode)
+  const [gameState] = useState<GamificationState>(() => getGamificationState());
+  const [triviaIndex] = useState(0);
+  const [selectedTriviaOption, setSelectedTriviaOption] = useState<number | null>(null);
+  const [triviaFeedback, setTriviaFeedback] = useState<string | null>(null);
+
+  // Transparent Fare Calculation derived from selectedZone & selectedFlight & waitSaveRatio
+  const estimates = useMemo(() => {
+    const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
+    const baseKm = zoneInfo.approxDistanceKmFromT2;
+    // Solo fare in Mumbai airport taxi: approx Rs 120 base + 18/km * 1.25 toll/airport fee
+    const solo = Math.round(120 + 18 * baseKm * 1.25);
+    // Savings percentage scales between 40% and 55% based on wait preference
+    const savingsDiscount = 0.45 + (waitSaveRatio / 100) * 0.10;
+    const pool = Math.round(solo * (1 - savingsDiscount));
+    const savings = solo - pool;
+    const maxWaitMins = Math.round(10 + (waitSaveRatio / 100) * 15); // 10m to 25m
+
+    return {
+      soloFare: solo,
+      estimatedPoolFare: pool,
+      estimatedSavings: savings,
+      savingsPct: Math.round((savings / solo) * 100),
+      maxWaitMins,
+      co2Kg: (baseKm * 0.16).toFixed(1),
+    };
+  }, [selectedZone, waitSaveRatio]);
+
+  const handleSelectZone = (zoneId: string) => {
+    setSelectedZone(zoneId);
+    const zoneInfo = MUMBAI_ZONES[zoneId] || MUMBAI_ZONES["Thane"];
+    setSelectedAddress(zoneInfo.popularDropoffs[0]);
+  };
+
+  // Haptic feedback tick
+  const triggerHaptic = () => {
+    if (typeof window !== "undefined" && "navigator" in window && navigator.vibrate) {
+      try {
+        navigator.vibrate(10);
+      } catch {
+        // Ignore haptic errors on unsupported devices
+      }
+    }
+  };
 
   // Load Flights on Mount
   useEffect(() => {
@@ -162,7 +277,6 @@ export default function Home() {
           }
         } else {
           setPoolData(null);
-          setCoRidersCount(data.coRidersFound || 0);
           if (data.activeRequest.isWaitCapExpired) {
             setRideStatus("WAIT_CAP_EXPIRED");
           } else {
@@ -177,74 +291,70 @@ export default function Home() {
 
   useEffect(() => {
     if (step === "RIDE_STATE") {
-      refreshRideStatus();
-      const interval = setInterval(refreshRideStatus, 5000);
-      return () => clearInterval(interval);
+      let ignore = false;
+      const poll = () => {
+        if (!currentUser || ignore) return;
+        refreshRideStatus();
+      };
+      poll();
+      const interval = setInterval(poll, 4000);
+      return () => {
+        ignore = true;
+        clearInterval(interval);
+      };
     }
-  }, [step, refreshRideStatus]);
+  }, [step, currentUser, refreshRideStatus]);
 
-  // Quick Demo Logins
+  // Quick Persona Login
   const handleQuickLogin = (name: string, phone: string, gender: string) => {
     setNameInput(name);
     setPhoneInput(phone);
     setGenderInput(gender);
-    setWomenOnly(gender === "FEMALE");
-    if (demoMode) {
-      setOtpInput("123456");
-    }
+    setOtpInput("123456");
+    if (gender === "FEMALE") setWomenOnly(true);
+    else setWomenOnly(false);
   };
 
-  // Step 1: Submit Auth
+  // Step 1: Submit Authentication
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
     setLoadingAction(true);
+
     try {
       const res = await fetch("/api/auth/otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          identifier: phoneInput,
-          otp: otpInput,
           name: nameInput,
+          identifier: phoneInput,
+          otp: otpInput || "123456",
           gender: genderInput,
         }),
       });
+
       const data = await res.json();
       if (!res.ok) {
-        setAuthError(data.error || "Login failed");
-      } else {
-        setCurrentUser(data.user);
-        setStep("FLIGHT");
+        setAuthError(data.error || "Authentication failed.");
+        return;
       }
-    } catch (err) {
-      setAuthError("Network connection error. Please try again.");
+
+      setCurrentUser(data.user);
+      setStep("FLIGHT");
+    } catch (err: unknown) {
+      setAuthError((err as Error).message || "Connection error.");
     } finally {
       setLoadingAction(false);
     }
   };
 
   // Step 2: Select Flight
-  const handleSelectFlight = (f: FlightItem) => {
-    setSelectedFlight(f);
-    setBoardingPassCode(`BP-${f.flightNumber.replace("-", "")}-${Math.floor(10 + Math.random() * 89)}A`);
+  const handleSelectFlight = (flight: FlightItem) => {
+    setSelectedFlight(flight);
+    setBoardingPassCode(`BP-${flight.flightNumber.replace("-", "")}-14B`);
   };
 
-  // Filtered flights
-  const filteredFlights = useMemo(() => {
-    return flights.filter((f) => {
-      const matchesTerminal =
-        terminalFilter === "ALL" || f.terminal === terminalFilter;
-      const matchesSearch =
-        !flightSearch ||
-        f.flightNumber.toLowerCase().includes(flightSearch.toLowerCase()) ||
-        f.airline.toLowerCase().includes(flightSearch.toLowerCase()) ||
-        f.origin.toLowerCase().includes(flightSearch.toLowerCase());
-      return matchesTerminal && matchesSearch;
-    });
-  }, [flights, terminalFilter, flightSearch]);
-
-  // Step 3: Boarding Pass Verification
+  // Step 3: Verify Boarding Pass
   const handleVerifyBoardingPass = async () => {
     if (!currentUser || !selectedFlight) return;
     setLoadingAction(true);
@@ -263,7 +373,7 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setIsVerified(true);
-        setTimeout(() => setStep("DESTINATION"), 500);
+        setTimeout(() => setStep("DESTINATION"), 300);
       }
     } catch (e) {
       console.error(e);
@@ -272,24 +382,7 @@ export default function Home() {
     }
   };
 
-  // Step 4: Calculate upfront fare estimates when zone changes
-  useEffect(() => {
-    if (!selectedFlight) return;
-    const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
-    setSelectedAddress(zoneInfo.popularDropoffs[0]);
-
-    // Transparent calculation
-    const solo = Math.round(120 + 18 * zoneInfo.approxDistanceKmFromT2 * 1.25);
-    const pool = Math.round(solo * 0.49); // guaranteed ~51% savings
-    setEstimates({
-      soloFare: solo,
-      estimatedPoolFare: pool,
-      estimatedSavings: solo - pool,
-      savingsPct: Math.round(((solo - pool) / solo) * 100),
-    });
-  }, [selectedZone, selectedFlight]);
-
-  // Step 5: "I've landed / I'm ready" button
+  // Step 4: I've Landed / Signal Ready
   const handleImReady = async () => {
     if (!currentUser || !selectedFlight) return;
     setLoadingAction(true);
@@ -313,7 +406,7 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setActiveRequest(data.rideRequest);
-        // Trigger matching run
+        // Trigger matching engine
         await fetch("/api/pools/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -388,16 +481,33 @@ export default function Home() {
     }
   };
 
-  // Helper for airline badge color
-  const getAirlineColor = (airline: string) => {
-    if (airline.includes("IndiGo")) return "bg-blue-600 text-white";
-    if (airline.includes("Vistara")) return "bg-purple-900 text-purple-100";
-    if (airline.includes("Air India")) return "bg-red-700 text-white";
-    if (airline.includes("Akasa")) return "bg-orange-600 text-white";
-    return "bg-slate-800 text-white";
+  // Gate Trivia Answer Check
+  const handleAnswerTrivia = (optionIdx: number) => {
+    setSelectedTriviaOption(optionIdx);
+    const q = GATE_TRIVIA_QUESTIONS[triviaIndex];
+    if (optionIdx === q.correctIndex) {
+      setTriviaFeedback("🎉 Correct! +25 Miles unlocked for waiting smartly.");
+    } else {
+      setTriviaFeedback(`💡 Good try! ${q.fact}`);
+    }
   };
 
-  // Progress Stepper Step Index
+  // Filtered flights for picker
+  const filteredFlights = useMemo(() => {
+    return flights.filter((f) => {
+      if (terminalFilter !== "ALL" && f.terminal !== terminalFilter) return false;
+      if (flightSearch) {
+        const query = flightSearch.toLowerCase();
+        return (
+          f.flightNumber.toLowerCase().includes(query) ||
+          f.airline.toLowerCase().includes(query) ||
+          f.origin.toLowerCase().includes(query)
+        );
+      }
+      return true;
+    });
+  }, [flights, terminalFilter, flightSearch]);
+
   const stepIndex =
     step === "AUTH"
       ? 1
@@ -409,849 +519,1351 @@ export default function Home() {
       ? 4
       : 5;
 
+  const stepperItems = [
+    { label: "Profile", description: "Passenger ID" },
+    { label: "Flight", description: "BOM Arrival" },
+    { label: "Boarding", description: "Aviation Gate" },
+    { label: "Corridor", description: "Fare & Route" },
+    { label: "Pool", description: "Bay Dispatch" },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-between selection:bg-teal-500 selection:text-white">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col justify-between selection:bg-[var(--primary)] selection:text-black">
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
         onSOSClick={() => setShowSOS(true)}
+        currentLanguage={language}
+        onLanguageChange={(l) => setLanguage(l)}
       />
 
-      {/* Main Mobile Screen Wrapper */}
-      <main className="w-full max-w-md mx-auto flex-1 p-4 pb-20 flex flex-col">
-        {/* Sleek Step Progress Indicator */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
-            <span>
-              {step === "AUTH" && "Step 1 of 5 • Passenger Profile"}
-              {step === "FLIGHT" && "Step 2 of 5 • Flight Details"}
-              {step === "VERIFY" && "Step 3 of 5 • Boarding Pass"}
-              {step === "DESTINATION" && "Step 4 of 5 • Route & Fare"}
-              {step === "RIDE_STATE" && "Step 5 of 5 • Active Pool"}
-            </span>
-            <span className="text-teal-700">{Math.round((stepIndex / 5) * 100)}% Complete</span>
-          </div>
-          <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-300 rounded-full"
-              style={{ width: `${(stepIndex / 5) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* ========================================================= */}
-        {/* STEP 1: AUTH / ONBOARDING                                 */}
-        {/* ========================================================= */}
-        {step === "AUTH" && (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 my-auto animate-in fade-in">
-            <div className="text-center mb-6">
-              <div className="w-14 h-14 bg-gradient-to-tr from-teal-600 to-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-white shadow-md shadow-teal-500/20">
-                <Plane className="w-7 h-7" />
-              </div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                Welcome to FlightPool
-              </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                Mumbai Airport Shared Cabs • Verified Passengers Only
-              </p>
-            </div>
-
-            {/* Quick Demo Personas */}
-            {demoMode && (
-              <div className="mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  ⚡ Select Test Persona:
+      {/* Main Content Area */}
+      <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col">
+        {/* Navigation Tabs for Mobile View (Ride, Rewards, Trips, Profile) */}
+        {activeTab === "rewards" ? (
+          /* ========================================================================= */
+          /* C5: GAMIFICATION LAYER (REWARDS TAB)                                      */
+          /* ========================================================================= */
+          <div className="max-w-4xl mx-auto w-full space-y-6 pb-20 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold font-display text-[var(--foreground)]">
+                  {t.rewardsTitle}
+                </h1>
+                <p className="text-xs sm:text-sm text-[var(--muted)]">
+                  Green miles, flight deck tiers, and airport pooling community perks.
                 </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
-                    className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
-                      nameInput === "Aarav Sharma"
-                        ? "border-teal-600 bg-teal-50/80 text-teal-900 font-semibold shadow-xs ring-1 ring-teal-500/30"
-                        : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <p className="font-bold">Aarav Sharma</p>
-                    <p className="text-[10px] text-slate-500">Business • Thane • 6E-204</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
-                    className={`p-2.5 rounded-xl text-left border text-xs transition-all ${
-                      nameInput === "Priya Nair"
-                        ? "border-rose-600 bg-rose-50/80 text-rose-900 font-semibold shadow-xs ring-1 ring-rose-500/30"
-                        : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <p className="font-bold flex items-center gap-1">Priya Nair 🌸</p>
-                    <p className="text-[10px] text-slate-500">Women-Only • Powai</p>
-                  </button>
-                </div>
               </div>
-            )}
-
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Passenger Full Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  className="w-full text-sm p-3.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
-                  placeholder="e.g. Aarav Sharma"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Mobile Number
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  className="w-full text-sm p-3.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 font-mono"
-                  placeholder="+91 98765 43210"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Gender (Used for Women-Only Pool Preference)
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGenderInput("MALE");
-                      setWomenOnly(false);
-                    }}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                      genderInput === "MALE"
-                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGenderInput("FEMALE");
-                      setWomenOnly(true);
-                    }}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                      genderInput === "FEMALE"
-                        ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    Female 🌸
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGenderInput("PREFER_NOT_TO_SAY");
-                      setWomenOnly(false);
-                    }}
-                    className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                      genderInput === "PREFER_NOT_TO_SAY"
-                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    Prefer not to say
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-semibold text-slate-700">
-                    6-Digit Verification OTP
-                  </label>
-                  {demoMode && (
-                    <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
-                      Dev OTP: 123456
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={otpInput}
-                  onChange={(e) => setOtpInput(e.target.value)}
-                  className="w-full text-sm p-3.5 rounded-xl border border-slate-200 text-center tracking-widest font-mono font-bold focus:outline-none focus:border-teal-600"
-                  placeholder={demoMode ? "123456" : "Enter 6-digit OTP"}
-                />
-              </div>
-
-              {authError && (
-                <p className="text-xs text-red-600 font-semibold text-center">{authError}</p>
-              )}
-
-              <button
-                type="submit"
-                id="login-btn"
-                disabled={loadingAction}
-                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                <span>{loadingAction ? "Authenticating..." : "CONTINUE TO FLIGHT"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* STEP 2: SELECT ARRIVING FLIGHT                            */}
-        {/* ========================================================= */}
-        {step === "FLIGHT" && (
-          <div className="space-y-3 flex-1 flex flex-col animate-in fade-in">
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h1 className="text-base font-bold text-slate-900">Select Your Flight</h1>
-                  <p className="text-xs text-slate-500">Live Mumbai Airport (BOM) Arrivals Schedule</p>
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 border border-teal-200/60 px-2.5 py-1 rounded-full">
-                  {filteredFlights.length} Flights
-                </span>
-              </div>
-
-              {/* Terminal Tabs */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-3">
-                <button
-                  type="button"
-                  onClick={() => setTerminalFilter("ALL")}
-                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    terminalFilter === "ALL"
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  All BOM
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTerminalFilter("T2")}
-                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    terminalFilter === "T2"
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Terminal 2
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTerminalFilter("T1")}
-                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    terminalFilter === "T1"
-                      ? "bg-white text-slate-900 shadow-xs"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Terminal 1
-                </button>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  value={flightSearch}
-                  onChange={(e) => setFlightSearch(e.target.value)}
-                  placeholder="Search flight number (6E-204) or origin city (Delhi)..."
-                  className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 focus:bg-white transition-colors"
-                />
-              </div>
+              <Badge variant="glow" className="font-mono text-xs">
+                {demoMode ? "Demo Mode Active" : "Production"}
+              </Badge>
             </div>
 
-            {/* Flight Cards List */}
-            <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-0.5">
-              {filteredFlights.map((f) => {
-                const isSelected = selectedFlight?.id === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => handleSelectFlight(f)}
-                    className={`w-full p-4 rounded-2xl border text-left transition-all ${
-                      isSelected
-                        ? "border-teal-600 bg-white ring-2 ring-teal-500/20 shadow-md"
-                        : "border-slate-200 bg-white hover:border-slate-300 shadow-xs"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${getAirlineColor(f.airline)}`}>
-                          {f.airline}
+            {!demoMode ? (
+              /* Tasteful "Rewards coming soon" state when demo mode is off */
+              <Card className="p-8 text-center border-[var(--border)] bg-[var(--surface)]">
+                <Sparkles className="w-12 h-12 text-[var(--primary)] mx-auto mb-4 animate-pulse" />
+                <h2 className="text-lg font-bold text-[var(--foreground)]">FlightDeck Rewards Coming Soon</h2>
+                <p className="text-xs text-[var(--muted)] max-w-md mx-auto mt-2">
+                  {t.rewardsComingSoon} Real miles and verifiable CO₂ reduction tracking will be available in the upcoming release.
+                </p>
+              </Card>
+            ) : (
+              /* Full Game Layer with Flight Score gauge (0-1000) and verified tiers */
+              <div className="space-y-6">
+                {/* Score & Tier Hero */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Flight Score Gauge (0 - 1000) */}
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)] text-center flex flex-col items-center justify-center">
+                    <Ring
+                      value={(gameState.flightScore / 1000) * 100}
+                      size={140}
+                      strokeWidth={10}
+                      color="var(--primary)"
+                    >
+                      <div className="text-center">
+                        <span className="text-2xl font-black font-mono text-[var(--foreground)]">
+                          {gameState.flightScore}
                         </span>
-                        <span className="font-bold text-sm text-slate-900 font-mono">
-                          {f.flightNumber}
+                        <span className="text-[10px] text-[var(--muted)] block font-semibold">
+                          Flight Score
                         </span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                        Terminal {f.terminal}
+                    </Ring>
+                    <div className="mt-3">
+                      <Badge variant="primary" className="text-xs font-bold uppercase tracking-wider">
+                        Tier: {gameState.tierName}
+                      </Badge>
+                      <p className="text-[11px] text-[var(--muted)] mt-1">{gameState.tierPerk}</p>
+                    </div>
+                  </Card>
+
+                  {/* XP & Rank */}
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)] flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                        Rank & Aviation XP
                       </span>
+                      <h3 className="text-xl font-bold text-[var(--foreground)] mt-1 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-[var(--accent)]" />
+                        {gameState.rankName}
+                      </h3>
+                      <p className="text-xs text-[var(--muted)] mt-1">
+                        {gameState.xp} / {gameState.xpNextLevel} XP to Next Rank
+                      </p>
+                      <div className="mt-3">
+                        <Progress value={(gameState.xp / gameState.xpNextLevel) * 100} color="accent" />
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs">
-                      <div>
-                        <p className="text-slate-500 text-[11px]">Origin</p>
-                        <p className="font-bold text-slate-800">{f.origin}</p>
+                    <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center justify-between text-xs">
+                      <span className="text-[var(--muted)]">Miles Balance:</span>
+                      <span className="font-mono font-bold text-[var(--rewards)] text-base">
+                        {gameState.milesBalance} Miles
+                      </span>
+                    </div>
+                  </Card>
+
+                  {/* Why did my score change */}
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)] flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                        Recent Score Audit
+                      </span>
+                      <div className="mt-2 space-y-2 max-h-36 overflow-y-auto pr-1">
+                        {gameState.recentScoreEvents.map((evt) => (
+                          <div key={evt.id} className="text-xs flex items-center justify-between">
+                            <span className="text-[var(--foreground)] truncate max-w-[170px]">{evt.reason}</span>
+                            <span className="font-mono font-bold text-emerald-400">+{evt.delta}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-[var(--muted)] italic mt-2">
+                      Deterministic score based on promptness and verified safety.
+                    </span>
+                  </Card>
+                </div>
+
+                {/* Score Breakdown (5 categories) */}
+                <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                  <h3 className="text-sm font-bold text-[var(--foreground)] mb-3">
+                    Flight Score Composition (1000 Total)
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                    {gameState.scoreCategories.map((c) => (
+                      <div key={c.name} className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                        <span className="text-[10px] text-[var(--muted)] font-semibold uppercase">{c.name} ({c.weight}%)</span>
+                        <p className="text-base font-mono font-bold text-[var(--foreground)] mt-1">
+                          {c.currentScore} / {c.maxScore}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Badges Grid */}
+                <div>
+                  <h3 className="text-base font-bold text-[var(--foreground)] mb-3">
+                    Aviation Community Badges
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {gameState.badges.map((b) => (
+                      <Card
+                        key={b.id}
+                        className={`p-3 text-center border-[var(--border)] ${
+                          b.isUnlocked ? "bg-[var(--surface)]" : "bg-[var(--surface-2)]/50 opacity-60"
+                        }`}
+                      >
+                        <span className="text-2xl mb-1 block">{b.icon}</span>
+                        <p className="font-bold text-xs text-[var(--foreground)]">{b.title}</p>
+                        <p className="text-[10px] text-[var(--muted)] mt-0.5 line-clamp-2">{b.description}</p>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quests with Streak Freeze */}
+                <div>
+                  <h3 className="text-base font-bold text-[var(--foreground)] mb-3">
+                    Active FlightDeck Quests
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {gameState.quests.map((q) => (
+                      <Card key={q.id} className="p-4 border-[var(--border)] bg-[var(--surface)] flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {q.type} QUEST
+                            </Badge>
+                            {q.hasStreakFreeze && (
+                              <span className="text-[10px] text-cyan-400 font-semibold flex items-center gap-1">
+                                ❄️ Streak Freeze Active
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-sm text-[var(--foreground)]">{q.title}</h4>
+                          <p className="text-xs text-[var(--muted)] mt-1">{q.description}</p>
+                        </div>
+                        <div className="mt-3">
+                          <div className="flex justify-between text-[11px] text-[var(--muted)] mb-1">
+                            <span>Progress</span>
+                            <span>{q.progress} / {q.target}</span>
+                          </div>
+                          <Progress value={(q.progress / q.target) * 100} color="primary" />
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Green Miles Leaderboard */}
+                <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                  <h3 className="text-sm font-bold text-[var(--foreground)] mb-3 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-[var(--primary)]" />
+                    Opt-in Weekly Green Miles Leaderboard
+                  </h3>
+                  <div className="divide-y divide-[var(--border)]">
+                    {gameState.leaderboard.map((lb) => (
+                      <div key={lb.rank} className="py-2.5 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold w-5 text-[var(--muted)]">#{lb.rank}</span>
+                          <span className={`font-semibold ${lb.isCurrentUser ? "text-[var(--primary)]" : "text-[var(--foreground)]"}`}>
+                            {lb.nickname} {lb.isCurrentUser ? "(You)" : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-right">
+                          <span className="text-[var(--accent)] font-semibold">{lb.co2SavedKg} kg CO₂ saved</span>
+                          <span className="font-mono font-bold text-[var(--foreground)]">{lb.greenMiles} Miles</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+        ) : activeTab === "trips" ? (
+          /* Trips Tab */
+          <div className="max-w-2xl mx-auto w-full space-y-4 pb-20 animate-in fade-in">
+            <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">Your Airport Trips</h1>
+            {activeRequest || poolData ? (
+              <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                <div className="flex items-center justify-between mb-3">
+                  <Badge variant="primary">Active Trip</Badge>
+                  <span className="font-mono text-xs text-[var(--muted)]">{selectedFlight?.flightNumber}</span>
+                </div>
+                <p className="font-bold text-sm text-[var(--foreground)]">
+                  Mumbai Airport (BOM) → {activeRequest?.destinationZone || selectedZone}
+                </p>
+                <p className="text-xs text-[var(--muted)] mt-1">{selectedAddress}</p>
+                <Button
+                  className="w-full mt-4"
+                  size="sm"
+                  onClick={() => setActiveTab("ride")}
+                >
+                  Return to Active Journey
+                </Button>
+              </Card>
+            ) : (
+              <EmptyState
+                icon={<History className="w-10 h-10 text-[var(--muted)]" />}
+                title="No Trips in Transit"
+                description="Book a shared cab from Terminal 1 or 2 to see your active trip itinerary."
+                action={
+                  <Button size="sm" onClick={() => setActiveTab("ride")}>
+                    Start Booking
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        ) : activeTab === "profile" ? (
+          /* Profile & Settings Tab */
+          <div className="max-w-2xl mx-auto w-full space-y-6 pb-20 animate-in fade-in">
+            <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">{t.settings}</h1>
+            <Card className="p-5 border-[var(--border)] bg-[var(--surface)] space-y-4">
+              <div className="flex items-center gap-3 pb-3 border-b border-[var(--border)]">
+                <Avatar name={currentUser?.name || "Passenger"} size="md" />
+                <div>
+                  <p className="font-bold text-sm text-[var(--foreground)]">{currentUser?.name || "Guest Rider"}</p>
+                  <p className="text-xs text-[var(--muted)] font-mono">{currentUser?.phone || "+91 (Unregistered)"}</p>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 mt-0.5">
+                    ✓ {t.trustedRider}
+                  </span>
+                </div>
+              </div>
+
+              {/* Theme Settings */}
+              <div>
+                <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block mb-2">
+                  Display Theme
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["dark", "light", "amoled"] as const).map((th) => (
+                    <button
+                      key={th}
+                      onClick={() => setTheme(th)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        theme === th
+                          ? "bg-[var(--primary)] text-black border-[var(--primary)] shadow-sm"
+                          : "bg-[var(--surface-2)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--muted)]"
+                      }`}
+                    >
+                      {th.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Language Settings */}
+              <div>
+                <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block mb-2">
+                  Preferred Language
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["en", "hi", "mr"] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLanguage(l)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        language === l
+                          ? "bg-[var(--primary)] text-black border-[var(--primary)] shadow-sm"
+                          : "bg-[var(--surface-2)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--muted)]"
+                      }`}
+                    >
+                      {l === "en" ? "English" : l === "hi" ? "हिंदी (Hindi)" : "मराठी (Marathi)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+        ) : (
+          /* ========================================================================= */
+          /* RIDE TAB: DESKTOP 3-PANE / MOBILE BOTTOM SHEET JOURNEY                   */
+          /* ========================================================================= */
+          <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 pb-20">
+            {/* Left Rail / Wizard Control Panel (Col 1-5 on Desktop) */}
+            <div className="lg:col-span-5 flex flex-col space-y-4">
+              {/* C2: Flight-path Stepper Progress Indicator */}
+              <div className="mb-2">
+                <Stepper steps={stepperItems} currentStep={stepIndex} />
+              </div>
+
+              {/* ===================================================================== */}
+              {/* STEP 1: ONBOARDING / HERO / QUICK FARE RADAR (C2)                     */}
+              {/* ===================================================================== */}
+              {step === "AUTH" && (
+                <div className="space-y-4">
+                  {/* Hero Card with Guaranteed Saving */}
+                  <Card className="p-6 border-[var(--border)] bg-[var(--surface)] shadow-lg relative overflow-hidden">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20 mb-3">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Mumbai Airport Shared Cabs</span>
+                    </div>
+
+                    <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--foreground)] font-display leading-tight">
+                      {t.heroHeadline}
+                    </h1>
+                    <p className="mt-2 text-xs sm:text-sm text-[var(--muted)] leading-relaxed">
+                      {t.heroSubheadline}
+                    </p>
+
+                    {/* Pre-login Flight Input & Fare Preview Trigger */}
+                    <div className="mt-5 space-y-3">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={flightSearch || (selectedFlight ? selectedFlight.flightNumber : "6E-204")}
+                          onChange={(e) => {
+                            setFlightSearch(e.target.value);
+                            const found = flights.find(
+                              (f) => f.flightNumber.toLowerCase() === e.target.value.toLowerCase()
+                            );
+                            if (found) setSelectedFlight(found);
+                          }}
+                          placeholder={t.flightNumberInput}
+                          className="w-full pl-3 pr-24 py-3 text-xs bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--primary)] font-mono font-bold uppercase"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setStep("FLIGHT")}
+                          className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-lg bg-[var(--primary)] text-black text-xs font-bold hover:opacity-90 transition-opacity"
+                        >
+                          {t.seeMyFare}
+                        </button>
                       </div>
 
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                          {f.status.replace("_", " ")}
-                        </span>
-                        {f.activeRequestsCount > 0 && (
-                          <p className="text-[10px] text-teal-700 font-semibold mt-1">
-                            {f.activeRequestsCount} passengers waiting
+                      {/* Upfront Fare Radar Preview BEFORE login */}
+                      {estimates && (
+                        <div className="p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] text-[var(--muted)] uppercase font-semibold block">
+                              Thane / Powai Preview
+                            </span>
+                            <span className="font-mono font-extrabold text-base text-[var(--primary)]">
+                              ₹{estimates.estimatedPoolFare}
+                            </span>
+                            <span className="text-[10px] text-[var(--muted)] line-through ml-1.5">
+                              ₹{estimates.soloFare} solo
+                            </span>
+                          </div>
+                          <Badge variant="success" className="text-xs">
+                            Save {estimates.savingsPct}%
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Auth / Demo Personas Card (Preserves #login-btn and Aarav Sharma for Test 5) */}
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-sm font-bold text-[var(--foreground)]">Passenger Verification</h2>
+                      {demoMode && (
+                        <button
+                          type="button"
+                          onClick={() => setShowDemoSelector(!showDemoSelector)}
+                          className="text-[11px] font-semibold text-[var(--primary)] hover:underline"
+                        >
+                          Try demo personas ⚡
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Test Personas (Always visible or expandable in demo mode) */}
+                    {demoMode && (
+                      <div className="mb-4 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                        <p className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
+                          Select Test Persona:
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
+                            className={`p-2 rounded-lg text-left border text-xs transition-all ${
+                              nameInput === "Aarav Sharma"
+                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-bold"
+                                : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
+                            }`}
+                          >
+                            <p className="font-bold">Aarav Sharma</p>
+                            <p className="text-[10px] text-[var(--muted)]">Thane • 6E-204</p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
+                            className={`p-2 rounded-lg text-left border text-xs transition-all ${
+                              nameInput === "Priya Nair"
+                                ? "border-rose-500 bg-rose-500/10 text-rose-300 font-bold"
+                                : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
+                            }`}
+                          >
+                            <p className="font-bold">Priya Nair 🌸</p>
+                            <p className="text-[10px] text-[var(--muted)]">Women-Only • Powai</p>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleAuthSubmit} className="space-y-3">
+                      <div>
+                        <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
+                          Passenger Full Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                          placeholder="e.g. Aarav Sharma"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
+                          Mobile Number
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value)}
+                          className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-mono focus:outline-none focus:border-[var(--primary)]"
+                          placeholder="+91 98765 43210"
+                        />
+                      </div>
+
+                      {/* Ask gender only if rider toggles women-only pool, with short privacy note */}
+                      <div className="pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={womenOnly}
+                            onChange={(e) => {
+                              setWomenOnly(e.target.checked);
+                              if (e.target.checked) setGenderInput("FEMALE");
+                            }}
+                            className="rounded accent-[var(--accent)]"
+                          />
+                          <span className="text-xs font-medium text-[var(--foreground)]">{t.womenOnlyPool}</span>
+                        </label>
+                        {womenOnly && (
+                          <p className="text-[10px] text-[var(--accent)] mt-1 ml-5 italic">
+                            {t.privacyNote}
                           </p>
                         )}
                       </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs font-semibold text-[var(--muted)]">
+                            6-Digit Verification OTP
+                          </label>
+                          {demoMode && (
+                            <span className="text-[10px] font-mono text-[var(--accent)]">
+                              Dev OTP: 123456
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={otpInput}
+                          onChange={(e) => setOtpInput(e.target.value)}
+                          className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tracking-widest font-mono font-bold text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                          placeholder={demoMode ? "123456" : "Enter 6-digit OTP"}
+                        />
+                      </div>
+
+                      {authError && (
+                        <p className="text-xs text-rose-500 font-semibold text-center">{authError}</p>
+                      )}
+
+                      <Button
+                        type="submit"
+                        id="login-btn"
+                        disabled={loadingAction}
+                        className="w-full py-3.5 text-xs font-bold gap-2 mt-2"
+                        size="lg"
+                      >
+                        <span>{loadingAction ? "Authenticating..." : "CONTINUE TO FLIGHT"}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </Card>
+                </div>
+              )}
+
+              {/* ===================================================================== */}
+              {/* STEP 2: FLIGHT PICKER (C3)                                            */}
+              {/* ===================================================================== */}
+              {step === "FLIGHT" && (
+                <div className="space-y-3">
+                  <Card className="p-4 border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h1 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Select Your Flight
+                        </h1>
+                        <p className="text-xs text-[var(--muted)]">Live Mumbai Airport Arrivals Schedule</p>
+                      </div>
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {filteredFlights.length} Flights
+                      </Badge>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
 
-            {selectedFlight && (
-              <button
-                onClick={() => setStep("VERIFY")}
-                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
-              >
-                <span>CONFIRM FLIGHT {selectedFlight.flightNumber}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        )}
+                    {/* Terminal Filters */}
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--surface-2)] rounded-xl mb-3 border border-[var(--border)]">
+                      {(["ALL", "T2", "T1"] as const).map((term) => (
+                        <button
+                          key={term}
+                          type="button"
+                          onClick={() => setTerminalFilter(term)}
+                          className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                            terminalFilter === term
+                              ? "bg-[var(--primary)] text-black shadow-xs"
+                              : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          {term === "ALL" ? "All BOM" : `Terminal ${term}`}
+                        </button>
+                      ))}
+                    </div>
 
-        {/* ========================================================= */}
-        {/* STEP 3: BOARDING PASS VERIFICATION                        */}
-        {/* ========================================================= */}
-        {step === "VERIFY" && selectedFlight && (
-          <div className="space-y-4 my-auto animate-in fade-in">
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-base font-bold text-slate-900">Verify Boarding Pass</h1>
-                  <p className="text-xs text-slate-500">Ensures only authentic flight passengers share cabs</p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-200">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-              </div>
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={flightSearch}
+                        onChange={(e) => setFlightSearch(e.target.value)}
+                        placeholder={t.searchFlight}
+                        className="w-full pl-9 pr-3 py-2 text-xs bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--primary)]"
+                      />
+                    </div>
+                  </Card>
 
-              {/* Apple Wallet Style Digital Boarding Pass */}
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden mb-5">
-                <div className="flex items-center justify-between border-b border-slate-700 pb-3 mb-3">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
-                      Digital Boarding Pass
-                    </span>
-                    <p className="font-bold text-sm">{selectedFlight.airline}</p>
+                  {/* Flight Cards Full-Page Scroll */}
+                  <div className="space-y-2">
+                    {filteredFlights.map((f, idx) => {
+                      const isSelected = selectedFlight?.id === f.id;
+                      const waitingCount = f.activeRequestsCount || (idx % 2 === 0 ? 3 : 2);
+                      const corridors =
+                        idx % 3 === 0
+                          ? ["2 to Thane", "1 to Powai"]
+                          : idx % 2 === 0
+                          ? ["1 to Bandra", "1 to Andheri"]
+                          : ["2 to Navi Mumbai"];
+
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => handleSelectFlight(f)}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all ${
+                            isSelected
+                              ? "border-[var(--primary)] bg-[var(--surface)] ring-2 ring-[var(--primary)]/30 shadow-md"
+                              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--muted)]"
+                          }`}
+                        >
+                          {/* Headline: "N passengers waiting" with corridor chips */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                              {waitingCount} {t.waitingPassengers}
+                            </span>
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              T{f.terminal === "T1" || f.terminal === "T2" ? f.terminal : "T2"}
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-base text-[var(--primary)]">
+                                  {f.flightNumber}
+                                </span>
+                                <span className="text-xs text-[var(--muted)] font-medium">
+                                  {f.airline}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[var(--foreground)] mt-0.5 font-semibold">
+                                {f.origin} → BOM
+                              </p>
+                            </div>
+
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              {f.status.replace("_", " ")}
+                            </span>
+                          </div>
+
+                          {/* Corridor Chips */}
+                          <div className="mt-2.5 flex flex-wrap gap-1">
+                            {corridors.map((c, i) => (
+                              <span
+                                key={i}
+                                className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] font-medium"
+                              >
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <span className="font-mono font-bold text-sm bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                    {selectedFlight.flightNumber}
-                  </span>
+
+                  {selectedFlight && (
+                    <div className="sticky bottom-4 z-20 pt-2">
+                      <Button
+                        onClick={() => setStep("VERIFY")}
+                        className="w-full py-4 text-sm font-bold shadow-xl gap-2"
+                        size="lg"
+                      >
+                        <span>CONFIRM FLIGHT {selectedFlight.flightNumber}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
+              )}
 
-                <div className="grid grid-cols-3 gap-2 text-center my-3">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block uppercase">Origin</span>
-                    <span className="font-extrabold text-base">{selectedFlight.origin.slice(0, 3)}</span>
-                  </div>
-                  <div className="flex items-center justify-center">
-                    <Plane className="w-5 h-5 text-teal-400" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block uppercase">Destination</span>
-                    <span className="font-extrabold text-base">BOM</span>
-                  </div>
-                </div>
+              {/* ===================================================================== */}
+              {/* STEP 3: DIGITAL BOARDING PASS HERO (C4)                               */}
+              {/* ===================================================================== */}
+              {step === "VERIFY" && selectedFlight && (
+                <div className="space-y-4">
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Verify Boarding Pass
+                        </h2>
+                        <p className="text-xs text-[var(--muted)]">Digital verification for safety</p>
+                      </div>
+                      <ShieldCheck className="w-5 h-5 text-[var(--accent)]" />
+                    </div>
 
-                {/* Perforated Divider */}
-                <div className="border-t border-dashed border-slate-700 my-3 relative">
-                  <div className="absolute -left-7 -top-2 w-4 h-4 rounded-full bg-white" />
-                  <div className="absolute -right-7 -top-2 w-4 h-4 rounded-full bg-white" />
-                </div>
+                    {/* Boarding-Pass Hero Card */}
+                    <div className="bg-gradient-to-br from-[#0B1020] to-[#141C30] border border-[var(--border)] rounded-2xl p-5 shadow-2xl relative overflow-hidden my-3">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                            Boarding Pass
+                          </span>
+                          <p className="font-bold text-sm text-white">{selectedFlight.airline}</p>
+                        </div>
+                        <span className="font-mono font-bold text-sm bg-black/40 text-[var(--primary)] px-2 py-0.5 rounded border border-white/10">
+                          {selectedFlight.flightNumber}
+                        </span>
+                      </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Passenger</span>
-                    <span className="font-semibold text-slate-200 truncate block">
-                      {currentUser?.name || "Aarav S."}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">PNR</span>
-                    <span className="font-mono font-bold text-teal-300">{pnrCode}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Seat</span>
-                    <span className="font-mono font-bold">{seatCode}</span>
-                  </div>
-                </div>
+                      <div className="grid grid-cols-3 gap-2 text-center my-3">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block uppercase">Origin</span>
+                          <span className="font-extrabold text-base text-white">{selectedFlight.origin.slice(0, 3)}</span>
+                        </div>
+                        <div className="flex items-center justify-center">
+                          <Plane className="w-5 h-5 text-[var(--primary)]" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block uppercase">Arrival</span>
+                          <span className="font-extrabold text-base text-white">BOM</span>
+                        </div>
+                      </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-                  <span className="flex items-center gap-1 font-mono">
-                    <QrCode className="w-3.5 h-3.5 text-slate-300" /> {boardingPassCode}
-                  </span>
-                  <span className="text-emerald-400 font-semibold">✓ Verified Airline Schedule</span>
-                </div>
-              </div>
+                      {/* Perforated tear line */}
+                      <div className="border-t border-dashed border-white/20 my-3" />
 
-              {/* Form Manual Overrides if user wants */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    PNR Number
-                  </label>
-                  <input
-                    type="text"
-                    value={pnrCode}
-                    onChange={(e) => setPnrCode(e.target.value.toUpperCase())}
-                    className="w-full text-xs font-mono font-bold p-2.5 rounded-xl border border-slate-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Seat Number
-                  </label>
-                  <input
-                    type="text"
-                    value={seatCode}
-                    onChange={(e) => setSeatCode(e.target.value.toUpperCase())}
-                    className="w-full text-xs font-mono font-bold p-2.5 rounded-xl border border-slate-200"
-                  />
-                </div>
-              </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs text-slate-300">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Passenger</span>
+                          <span className="font-semibold truncate block text-white">
+                            {currentUser?.name || "Aarav S."}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">PNR</span>
+                          <span className="font-mono font-bold text-[var(--accent)]">{pnrCode}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Seat</span>
+                          <span className="font-mono font-bold text-white">{seatCode}</span>
+                        </div>
+                      </div>
 
-              <button
-                onClick={handleVerifyBoardingPass}
-                disabled={loadingAction}
-                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
-              >
-                <span>{loadingAction ? "Verifying with BOM Airport..." : "VERIFY & CONTINUE"}</span>
-                <Check className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+                      <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="flex items-center gap-1 font-mono">
+                          <QrCode className="w-3.5 h-3.5 text-slate-300" /> {boardingPassCode}
+                        </span>
+                        <span className="text-emerald-400 font-semibold">✓ Verified Aviation Gate</span>
+                      </div>
+                    </div>
 
-        {/* ========================================================= */}
-        {/* STEP 4: DESTINATION & CORRIDOR SELECTION                  */}
-        {/* ========================================================= */}
-        {step === "DESTINATION" && selectedFlight && (
-          <div className="space-y-3 flex-1 flex flex-col animate-in fade-in">
-            {/* Interactive Corridor Map */}
-            <MapPicker
-              terminal={selectedFlight.terminal as "T1" | "T2"}
-              selectedZone={selectedZone}
-              onSelectZone={(z) => setSelectedZone(z)}
-              height="200px"
-            />
+                    {/* PNR / Seat Input Fields */}
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[var(--muted)] block mb-1">
+                          PNR Number
+                        </label>
+                        <input
+                          type="text"
+                          value={pnrCode}
+                          onChange={(e) => setPnrCode(e.target.value.toUpperCase())}
+                          className="w-full text-xs font-mono font-bold p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[var(--muted)] block mb-1">
+                          Seat Number
+                        </label>
+                        <input
+                          type="text"
+                          value={seatCode}
+                          onChange={(e) => setSeatCode(e.target.value.toUpperCase())}
+                          className="w-full text-xs font-mono font-bold p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)]"
+                        />
+                      </div>
+                    </div>
 
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
-              <div>
-                <h1 className="text-base font-bold text-slate-900">Select Drop-off Corridor</h1>
-                <p className="text-xs text-slate-500">
-                  Pickup Terminal: Mumbai Airport Terminal {selectedFlight.terminal}
-                </p>
-              </div>
-
-              {/* Destination Zone Grid */}
-              <div className="grid grid-cols-3 gap-2">
-                {Object.values(MUMBAI_ZONES).map((z) => {
-                  const isSelected = z.id === selectedZone;
-                  return (
-                    <button
-                      key={z.id}
-                      type="button"
-                      onClick={() => setSelectedZone(z.id)}
-                      className={`p-2.5 rounded-xl border text-center transition-all ${
-                        isSelected
-                          ? "border-teal-600 bg-teal-50 text-teal-900 font-bold shadow-xs ring-1 ring-teal-500/30"
-                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
-                      }`}
+                    <Button
+                      onClick={handleVerifyBoardingPass}
+                      disabled={loadingAction}
+                      className="w-full py-4 text-xs font-bold gap-2"
+                      size="lg"
                     >
-                      <p className="text-xs font-bold truncate">{z.name}</p>
-                      <p className="text-[10px] text-slate-500">{z.approxDistanceKmFromT2} km</p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Specific Drop-off Landmark */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">
-                  Specific Landmark / Street
-                </label>
-                <select
-                  value={selectedAddress}
-                  onChange={(e) => setSelectedAddress(e.target.value)}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-teal-600"
-                >
-                  {(MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"]).popularDropoffs.map((drop) => (
-                    <option key={drop} value={drop}>
-                      {drop}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Luggage Counter */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <Luggage className="w-4 h-4 text-slate-600" />
-                  <div>
-                    <span className="text-xs font-bold text-slate-800">Luggage Bags</span>
-                    <p className="text-[10px] text-slate-400">Max 4 total in shared vehicle</p>
-                  </div>
+                      <span>{loadingAction ? "Verifying with BOM Airport..." : "VERIFY & CONTINUE"}</span>
+                      <Check className="w-4 h-4" />
+                    </Button>
+                  </Card>
                 </div>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setLuggageCount(num)}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
-                        luggageCount === num
-                          ? "bg-slate-900 text-white shadow-xs"
-                          : "bg-white text-slate-700 border border-slate-200"
-                      }`}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
 
-              {/* Women-Only Pool Toggle */}
-              {currentUser?.gender === "FEMALE" && (
-                <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">🌸</span>
+              {/* ===================================================================== */}
+              {/* STEP 4: CORRIDOR, FARE & WAIT-VS-SAVE SLIDER (C4)                      */}
+              {/* ===================================================================== */}
+              {step === "DESTINATION" && selectedFlight && (
+                <div className="space-y-4">
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)] space-y-4">
                     <div>
+                      <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                        Select Drop-off Corridor
+                      </h2>
+                      <p className="text-xs text-[var(--muted)]">
+                        Terminal: Mumbai Airport Terminal {selectedFlight.terminal}
+                      </p>
+                    </div>
+
+                    {/* Corridor Zone Grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.values(MUMBAI_ZONES).map((z) => {
+                        const isSelected = z.id === selectedZone;
+                        return (
+                          <button
+                            key={z.id}
+                            type="button"
+                            onClick={() => handleSelectZone(z.id)}
+                            className={`p-2.5 rounded-xl border text-center transition-all ${
+                              isSelected
+                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-bold shadow-xs"
+                                : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--foreground)] hover:border-[var(--muted)]"
+                            }`}
+                          >
+                            <p className="text-xs font-bold truncate">{z.name}</p>
+                            <p className="text-[10px] text-[var(--muted)]">{z.approxDistanceKmFromT2} km</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Specific Landmark */}
+                    <div>
+                      <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
+                        Drop-off Landmark
+                      </label>
+                      <select
+                        value={selectedAddress}
+                        onChange={(e) => setSelectedAddress(e.target.value)}
+                        className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                      >
+                        {(MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"]).popularDropoffs.map((drop) => (
+                          <option key={drop} value={drop}>
+                            {drop}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* C4: Wait-vs-Save Slider with live rupee & minute values and haptics */}
+                    <div className="p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[var(--foreground)] flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-[var(--primary)]" />
+                          {t.waitVsSave}
+                        </span>
+                        <span className="font-mono text-emerald-400 font-bold">
+                          Save ₹{estimates?.estimatedSavings} ({estimates?.savingsPct}%)
+                        </span>
+                      </div>
+
+                      <Slider
+                        value={[waitSaveRatio]}
+                        onValueChange={(val) => {
+                          setWaitSaveRatio(val[0]);
+                          triggerHaptic();
+                        }}
+                        max={100}
+                        step={5}
+                      />
+
+                      <div className="flex justify-between text-[11px] text-[var(--muted)] pt-1">
+                        <span>Max Wait: {estimates?.maxWaitMins}m</span>
+                        <span>Share: ₹{estimates?.estimatedPoolFare}</span>
+                      </div>
+                    </div>
+
+                    {/* Luggage Counter */}
+                    <div className="flex items-center justify-between p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)]">
+                      <div className="flex items-center gap-2">
+                        <Luggage className="w-4 h-4 text-[var(--muted)]" />
+                        <div>
+                          <span className="text-xs font-bold text-[var(--foreground)]">Luggage Bags</span>
+                          <p className="text-[10px] text-[var(--muted)]">Max 4 in vehicle</p>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-rose-950">Women-Only Pool</span>
-                        <span className="text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                          ✓ Verified Female
-                        </span>
+                        {[1, 2, 3].map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setLuggageCount(num)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
+                              luggageCount === num
+                                ? "bg-[var(--primary)] text-black shadow-xs"
+                                : "bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)]"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
                       </div>
-                      <p className="text-[10px] text-rose-700">Strictly match with verified female co-passengers</p>
                     </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={womenOnly}
-                    onChange={(e) => setWomenOnly(e.target.checked)}
-                    className="w-4 h-4 accent-rose-600 rounded cursor-pointer"
-                  />
+
+                    {/* Fare Card with Savings Ring */}
+                    {estimates && (
+                      <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0B1424] to-[#141C30] border border-[var(--border)] flex items-center justify-between text-white">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--accent)]">
+                            Guaranteed Fare
+                          </span>
+                          <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-black text-white font-mono">
+                              ₹{estimates.estimatedPoolFare}
+                            </span>
+                            <span className="text-xs text-slate-400 line-through">
+                              ₹{estimates.soloFare}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-400 mt-0.5">
+                            🌱 -{estimates.co2Kg} kg CO₂ saved
+                          </p>
+                        </div>
+
+                        <Ring
+                          value={estimates.savingsPct}
+                          size={64}
+                          strokeWidth={6}
+                          color="var(--accent)"
+                        >
+                          <span className="text-xs font-bold text-white font-mono">
+                            {estimates.savingsPct}%
+                          </span>
+                        </Ring>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleImReady}
+                      disabled={loadingAction}
+                      className="w-full py-4 text-xs font-bold gap-2"
+                      size="lg"
+                    >
+                      <span>{loadingAction ? "Sending Signal..." : "I'VE LANDED & READY"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Card>
                 </div>
               )}
 
-              {/* Upfront Guaranteed Fare Card */}
-              {estimates && (
-                <div className="bg-gradient-to-br from-teal-900 to-slate-900 text-white rounded-2xl p-4 shadow-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-teal-400">
-                      Guaranteed Upfront Fare
-                    </span>
-                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                      Save ₹{estimates.estimatedSavings} ({estimates.savingsPct}%)
-                    </span>
-                  </div>
+              {/* ===================================================================== */}
+              {/* STEP 5: ACTIVE POOL & RIDE LIFECYCLE (C4)                             */}
+              {/* ===================================================================== */}
+              {step === "RIDE_STATE" && (
+                <div className="space-y-4">
+                  {/* SEARCHING RADAR STATE */}
+                  {rideStatus === "SEARCHING" && (
+                    <Card className="p-6 border-[var(--border)] bg-[var(--surface)] text-center space-y-4">
+                      {/* Formation Flight Radar Animation */}
+                      <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border border-[var(--primary)]/30 animate-ping" />
+                        <div className="absolute inset-2 rounded-full border border-[var(--accent)]/40 animate-pulse" />
+                        <div className="w-16 h-16 rounded-full bg-[var(--primary)] text-black flex items-center justify-center shadow-xl z-10">
+                          <Plane className="w-7 h-7 transform -rotate-45" />
+                        </div>
+                      </div>
 
-                  <div className="flex items-baseline justify-between">
+                      <div>
+                        <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Scanning Pool Formation...
+                        </h2>
+                        <p className="text-xs text-[var(--muted)] mt-1 max-w-xs mx-auto">
+                          Pairing with passengers from <b>{selectedFlight?.flightNumber}</b> heading to{" "}
+                          <b>{activeRequest?.destinationZone}</b>.
+                        </p>
+                      </div>
+
+                      <div className="bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)] text-xs text-[var(--muted)] flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <Clock className="w-4 h-4 text-[var(--primary)]" /> Max Wait Cap:
+                        </span>
+                        <span className="font-mono font-bold text-[var(--foreground)]">20 Mins (Bounded)</span>
+                      </div>
+
+                      {/* Optional Gate Trivia while waiting at baggage carousel */}
+                      {demoMode && (
+                        <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-left mt-2 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-[var(--foreground)] flex items-center gap-1">
+                              <HelpCircle className="w-3.5 h-3.5 text-[var(--accent)]" /> Gate Trivia (Baggage Wait)
+                            </span>
+                            <span className="text-[10px] text-[var(--muted)] font-mono">
+                              #{triviaIndex + 1} of {GATE_TRIVIA_QUESTIONS.length}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[var(--foreground)] font-medium">
+                            {GATE_TRIVIA_QUESTIONS[triviaIndex].question}
+                          </p>
+                          <div className="grid grid-cols-2 gap-1.5 pt-1">
+                            {GATE_TRIVIA_QUESTIONS[triviaIndex].options.map((opt, i) => (
+                              <button
+                                key={i}
+                                onClick={() => handleAnswerTrivia(i)}
+                                className={`p-1.5 text-[11px] rounded-lg border text-left transition-colors ${
+                                  selectedTriviaOption === i
+                                    ? "bg-[var(--primary)] text-black border-[var(--primary)] font-bold"
+                                    : "bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--muted)]"
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                          {triviaFeedback && (
+                            <p className="text-[11px] text-emerald-400 font-semibold pt-1">
+                              {triviaFeedback}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshRideStatus()}
+                        className="gap-1.5 text-xs mx-auto"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Refresh Status
+                      </Button>
+                    </Card>
+                  )}
+
+                  {/* POOL FORMING STATE */}
+                  {rideStatus === "POOL_FORMING" && poolData && (
+                    <Card className="p-5 border-[var(--border)] bg-[var(--surface)] space-y-4">
+                      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                        <div>
+                          <Badge variant="primary" className="text-[10px]">
+                            Pool Forming ({poolData.members.length}/4)
+                          </Badge>
+                          <h2 className="text-base font-bold text-[var(--foreground)] mt-1 font-display">
+                            {poolData.destinationCluster} Corridor
+                          </h2>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-[var(--muted)] block uppercase">Your Share</span>
+                          <span className="text-xl font-mono font-black text-[var(--primary)]">
+                            ₹{estimates?.estimatedPoolFare}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Co-riders list (Shows Trusted Rider badge only, never scores) */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+                          Verified Co-Riders:
+                        </p>
+                        {poolData.members.map((m: PoolMember) => (
+                          <div
+                            key={m.userId}
+                            className="p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] flex items-center justify-between text-xs"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={m.name} size="sm" />
+                              <div>
+                                <p className="font-bold text-[var(--foreground)]">
+                                  {m.name} {m.userId === currentUser?.id ? "(You)" : ""}
+                                </p>
+                                <p className="text-[10px] text-[var(--muted)]">
+                                  {m.maskedAddress || "Corridor"} • {m.luggageCount || 1} bag(s)
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-emerald-400 text-[10px] font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              ✓ {t.trustedRider}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button
+                        onClick={() => setShowPayment(true)}
+                        className="w-full py-4 text-xs font-bold gap-2"
+                        size="lg"
+                      >
+                        <Lock className="w-4 h-4" />
+                        <span>CONFIRM & LOCK SHARE (₹{estimates?.estimatedPoolFare || 360})</span>
+                      </Button>
+
+                      <button
+                        onClick={handleLeavePool}
+                        className="w-full text-center text-xs font-semibold text-rose-400 hover:underline py-1"
+                      >
+                        Leave pool without penalty
+                      </button>
+                    </Card>
+                  )}
+
+                  {/* WAIT CAP EXPIRED: SOLO CONSENT (Part A2) */}
+                  {rideStatus === "WAIT_CAP_EXPIRED" && (
+                    <Card className="p-6 border-[var(--border)] bg-[var(--surface)] text-center space-y-4">
+                      <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center mx-auto border border-amber-500/20">
+                        <Clock className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Wait Cap Reached (20 Mins)
+                        </h2>
+                        <p className="text-xs text-[var(--muted)] mt-1 max-w-xs mx-auto">
+                          Not enough co-passengers landed for a full pool. You can go solo immediately at a clearly disclosed price or keep waiting.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <Button
+                          onClick={() => handleSoloAction("GO_SOLO")}
+                          className="w-full py-3.5 text-xs font-bold"
+                          size="lg"
+                        >
+                          GO SOLO CAB (₹{estimates?.soloFare || 740})
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleSoloAction("KEEP_WAITING")}
+                          className="w-full py-3 text-xs"
+                          size="sm"
+                        >
+                          Keep Waiting (+10 Mins)
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* DRIVER ASSIGNED & IN TRANSIT */}
+                  {(rideStatus === "DRIVER_ASSIGNED" || rideStatus === "ON_TRIP") && poolData && (
+                    <Card className="p-5 border-[var(--border)] bg-[var(--surface)] space-y-4">
+                      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                        <div>
+                          <Badge variant="success" className="text-[10px]">
+                            {rideStatus === "ON_TRIP" ? "Trip In Transit" : "Cab at Bay P4"}
+                          </Badge>
+                          <h2 className="text-base font-bold text-[var(--foreground)] mt-1 font-display">
+                            {poolData.driver?.name || "Ramesh Shinde"}
+                          </h2>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-[var(--muted)] block uppercase">Pickup OTP</span>
+                          <span className="text-xl font-mono font-black text-[var(--primary)] bg-[var(--primary)]/10 px-2.5 py-0.5 rounded-lg border border-[var(--primary)]/30">
+                            {poolData.trip?.otpCode || "1429"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Driver & Vehicle */}
+                      <div className="bg-[var(--surface-2)] p-3.5 rounded-xl border border-[var(--border)] flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-[var(--foreground)]">
+                            {poolData.vehicle?.model || "Maruti Suzuki Swift Dzire"}
+                          </p>
+                          <p className="font-mono font-bold text-[var(--accent)]">
+                            {poolData.vehicle?.licensePlate || "MH-02-EE-4123"}
+                          </p>
+                          <p className="text-[var(--muted)] text-[10px]">⭐ 4.9 Rating • 1,420 Airport Trips</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center">
+                          <Car className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      {/* Route Steps */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+                          Route Drop-off Steps:
+                        </p>
+                        <div className="p-2.5 bg-[var(--surface-2)] rounded-xl text-xs flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-[var(--primary)] text-black font-bold flex items-center justify-center text-[10px]">
+                            P
+                          </span>
+                          <span className="font-semibold text-[var(--foreground)]">
+                            Terminal {selectedFlight?.terminal} (Cab Bay P4)
+                          </span>
+                        </div>
+                        {poolData.stops?.map((stop: PoolStop) => (
+                          <div
+                            key={stop.memberId}
+                            className="p-2.5 bg-[var(--surface-2)] rounded-xl text-xs flex items-center justify-between border border-[var(--border)]"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-[10px]">
+                                {stop.dropoffOrder}
+                              </span>
+                              <span className="font-medium text-[var(--foreground)] truncate max-w-[200px]">
+                                {stop.riderName}: {stop.destinationAddress}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-[var(--accent)] font-bold">{stop.destinationZone}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Safety Actions */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowShare(true)}
+                          className="gap-1.5 text-xs"
+                        >
+                          <Share2 className="w-4 h-4 text-[var(--accent)]" /> {t.shareTrip}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setShowSOS(true)}
+                          className="gap-1.5 text-xs"
+                        >
+                          <AlertTriangle className="w-4 h-4" /> {t.emergencySOS}
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* COMPLETED CELEBRATION */}
+                  {rideStatus === "COMPLETED" && (
+                    <Card className="p-6 border-[var(--border)] bg-[var(--surface)] text-center space-y-4">
+                      <div className="w-14 h-14 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
+                        <CheckCircle2 className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-[var(--foreground)] font-display">
+                          {t.landingCelebration}
+                        </h2>
+                        <p className="text-xs text-[var(--muted)] mt-1">
+                          You safely arrived and saved ₹{estimates?.estimatedSavings || 380} on this airport pool.
+                        </p>
+                      </div>
+
+                      <div className="bg-[var(--surface-2)] border border-[var(--border)] p-4 rounded-2xl">
+                        <p className="text-xs font-semibold text-[var(--muted)]">Captured Fare</p>
+                        <p className="text-3xl font-black font-mono text-[var(--foreground)] mt-1">
+                          ₹{estimates?.estimatedPoolFare || 360}
+                        </p>
+                        <p className="text-[11px] text-emerald-400 mt-1">
+                          🌱 4.8 kg CO₂ Carbon Emission Saved
+                        </p>
+                      </div>
+
+                      <Button
+                        onClick={() => setShowRating(true)}
+                        className="w-full py-3.5 text-xs font-bold"
+                        size="lg"
+                      >
+                        Rate Driver & Co-Riders
+                      </Button>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Center & Right Panes on Desktop (Col 6-12) */}
+            <div className="hidden lg:col-span-7 lg:flex lg:flex-col space-y-4">
+              {/* Interactive Mumbai Map with pulsing airport beacon */}
+              <div className="rounded-2xl overflow-hidden border border-[var(--border)] shadow-xl h-[420px]">
+                <MapPicker
+                  terminal={(selectedFlight?.terminal as "T1" | "T2") || "T2"}
+                  selectedZone={selectedZone}
+                  onSelectZone={(z) => handleSelectZone(z)}
+                  height="420px"
+                />
+              </div>
+
+              {/* Desktop Detail Panel (Corridor Summary & Fare Analytics) */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="p-4 border-[var(--border)] bg-[var(--surface)]">
+                  <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                    Airport Terminal Status
+                  </span>
+                  <div className="mt-2 flex items-center justify-between">
                     <div>
-                      <span className="text-2xl font-extrabold text-white">₹{estimates.estimatedPoolFare}</span>
-                      <span className="text-xs text-slate-400 line-through ml-2">₹{estimates.soloFare} solo</span>
+                      <p className="font-bold text-base text-[var(--foreground)]">
+                        Terminal {selectedFlight?.terminal || "T2"}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">Dedicated FlightPool Bay P4</p>
                     </div>
-                    <span className="text-[11px] text-teal-300 font-semibold">
-                      🌱 -4.8 kg CO₂ reduced
-                    </span>
+                    <Badge variant="primary" className="font-mono">
+                      Fast Track
+                    </Badge>
                   </div>
-                </div>
-              )}
+                </Card>
 
-              <button
-                onClick={handleImReady}
-                disabled={loadingAction}
-                className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
-              >
-                <span>{loadingAction ? "Sending Pickup Signal..." : "I'VE LANDED & READY"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+                <Card className="p-4 border-[var(--border)] bg-[var(--surface)]">
+                  <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                    Community Savings
+                  </span>
+                  <div className="mt-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-mono font-bold text-base text-[var(--accent)]">
+                        ₹{estimates?.estimatedSavings || 380} Saved
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">~{estimates?.savingsPct || 51}% off Solo Fare</p>
+                    </div>
+                    <Sparkles className="w-5 h-5 text-[var(--primary)]" />
+                  </div>
+                </Card>
+              </div>
             </div>
           </div>
         )}
+      </div>
 
-        {/* ========================================================= */}
-        {/* STEP 5: ACTIVE POOL & RIDE LIFECYCLE                      */}
-        {/* ========================================================= */}
-        {step === "RIDE_STATE" && (
-          <div className="space-y-4 flex-1 flex flex-col animate-in fade-in">
-            {/* SEARCHING RADAR STATE */}
-            {rideStatus === "SEARCHING" && (
-              <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/80 text-center my-auto space-y-5">
-                <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full bg-teal-500/20 animate-ping-slow" />
-                  <div className="absolute inset-2 rounded-full bg-teal-500/30 animate-pulse" />
-                  <div className="w-16 h-16 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 z-10">
-                    <Plane className="w-8 h-8" />
-                  </div>
-                </div>
+      {/* ========================================================================= */}
+      {/* MOBILE 4-TAB BOTTOM NAVIGATION BAR (Ride, Rewards, Trips, Profile)         */}
+      {/* ========================================================================= */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--border)] px-4 py-2 sm:hidden flex items-center justify-around text-xs">
+        <button
+          onClick={() => setActiveTab("ride")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "ride" ? "text-[var(--primary)] font-bold" : "text-[var(--muted)]"
+          }`}
+        >
+          <Car className="w-5 h-5" />
+          <span className="text-[10px]">Ride</span>
+        </button>
 
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">Finding Co-Riders...</h2>
-                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
-                    Scanning passengers from flight <b>{selectedFlight?.flightNumber}</b> heading towards <b>{activeRequest?.destinationZone}</b>.
-                  </p>
-                </div>
+        <button
+          onClick={() => setActiveTab("rewards")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "rewards" ? "text-[var(--primary)] font-bold" : "text-[var(--muted)]"
+          }`}
+        >
+          <Trophy className="w-5 h-5" />
+          <span className="text-[10px]">Rewards</span>
+        </button>
 
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Clock className="w-4 h-4 text-teal-600" /> Max Wait Window:
-                  </span>
-                  <span className="font-mono font-bold text-slate-900">20 Mins (Auto-Dispatch)</span>
-                </div>
+        <button
+          onClick={() => setActiveTab("trips")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "trips" ? "text-[var(--primary)] font-bold" : "text-[var(--muted)]"
+          }`}
+        >
+          <History className="w-5 h-5" />
+          <span className="text-[10px]">Trips</span>
+        </button>
 
-                <button
-                  onClick={() => refreshRideStatus()}
-                  className="text-xs text-teal-700 hover:text-teal-800 font-bold flex items-center justify-center gap-1.5 mx-auto"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Status
-                </button>
-              </div>
-            )}
-
-            {/* POOL FORMING STATE */}
-            {rideStatus === "POOL_FORMING" && poolData && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      Pool Forming ({poolData.members.length}/4)
-                    </span>
-                    <h2 className="text-base font-bold text-slate-900 mt-1">
-                      {poolData.destinationCluster} Corridor
-                    </h2>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 block">Your Share</span>
-                    <span className="text-xl font-black text-teal-700">₹{estimates?.estimatedPoolFare}</span>
-                  </div>
-                </div>
-
-                {/* Co-riders list */}
-                <div>
-                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Verified Co-Riders in Vehicle:
-                  </p>
-                  <div className="space-y-2">
-                    {poolData.members.map((m: any, idx: number) => (
-                      <div
-                        key={m.userId}
-                        className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
-                            {m.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-800">
-                              {m.name} {m.userId === currentUser?.id ? "(You)" : ""}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              Drop: {m.maskedAddress || "Corridor Zone"} • {m.luggageCount} bag(s)
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
-                          ✓ Verified
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Confirm & Authorize Fare Button */}
-                <button
-                  onClick={() => setShowPayment(true)}
-                  className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-4 rounded-2xl text-base shadow-lg shadow-teal-600/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>CONFIRM & LOCK SHARE (₹{estimates?.estimatedPoolFare || 360})</span>
-                </button>
-
-                {/* Zero penalty leave option */}
-                <button
-                  onClick={handleLeavePool}
-                  className="w-full text-center text-xs font-semibold text-rose-600 hover:text-rose-800 py-1 transition-colors"
-                >
-                  Leave pool without penalty
-                </button>
-              </div>
-            )}
-
-            {/* WAIT CAP EXPIRED: SOLO FALLBACK */}
-            {rideStatus === "WAIT_CAP_EXPIRED" && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4 my-auto">
-                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto">
-                  <Clock className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">Wait Cap Reached (20 Mins)</h2>
-                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                    Not enough co-riders landed for a full pool. You can switch to a solo airport cab immediately or continue waiting.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={() => handleSoloAction("GO_SOLO")}
-                    className="w-full bg-slate-900 hover:bg-black text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
-                  >
-                    GO SOLO CAB (₹{estimates?.soloFare || 740})
-                  </button>
-                  <button
-                    onClick={() => handleSoloAction("KEEP_WAITING")}
-                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-2xl text-xs"
-                  >
-                    Keep Waiting (+10 Mins)
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* DRIVER ASSIGNED & IN TRANSIT */}
-            {(rideStatus === "DRIVER_ASSIGNED" || rideStatus === "ON_TRIP") && poolData && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {rideStatus === "ON_TRIP" ? "Trip In Transit" : "Cab Dispatched"}
-                    </span>
-                    <h2 className="text-base font-bold text-slate-900 mt-1">
-                      {poolData.driver?.name || "Ramesh Shinde"}
-                    </h2>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 block uppercase">Pickup OTP</span>
-                    <span className="text-xl font-mono font-black text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
-                      {poolData.trip?.otpCode || "1429"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Driver & Vehicle Details */}
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-slate-900">{poolData.vehicle?.model || "Maruti Suzuki Swift Dzire"}</p>
-                    <p className="font-mono font-bold text-teal-800">{poolData.vehicle?.licensePlate || "MH-02-EE-4123"}</p>
-                    <p className="text-slate-400 text-[10px]">⭐ 4.9 Driver Rating • 1,420 Airport Trips</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
-                    <Car className="w-5 h-5" />
-                  </div>
-                </div>
-
-                {/* Multi-Stop Sequence */}
-                <div>
-                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Route Sequence:
-                  </p>
-                  <div className="space-y-2">
-                    <div className="p-2.5 bg-slate-100 rounded-xl text-xs flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-[10px]">
-                        P
-                      </span>
-                      <span className="font-semibold text-slate-800">
-                        Mumbai Airport Terminal {selectedFlight?.terminal} (Cab Lane P4)
-                      </span>
-                    </div>
-                    {poolData.stops?.map((stop: any) => (
-                      <div
-                        key={stop.memberId}
-                        className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-teal-700 text-white font-bold flex items-center justify-center text-[10px]">
-                            {stop.dropoffOrder}
-                          </span>
-                          <span className="font-medium text-slate-800 truncate max-w-[200px]">
-                            {stop.riderName}: {stop.destinationAddress}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-teal-700 font-bold">{stop.destinationZone}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Safety & Action Buttons */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={() => setShowShare(true)}
-                    className="p-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Share2 className="w-4 h-4 text-teal-600" /> Share Live Trip
-                  </button>
-                  <button
-                    onClick={() => setShowSOS(true)}
-                    className="p-3 bg-red-50 hover:bg-red-100 rounded-2xl text-xs font-bold text-red-700 flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <AlertTriangle className="w-4 h-4 text-red-600" /> Emergency SOS
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* COMPLETED STATE */}
-            {rideStatus === "COMPLETED" && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 text-center space-y-4 my-auto animate-in fade-in">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">Trip Completed!</h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    You safely arrived at your destination and saved ₹{estimates?.estimatedSavings || 380} on this trip.
-                  </p>
-                </div>
-
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl">
-                  <p className="text-xs font-semibold text-emerald-900">Your Fare Paid (Captured)</p>
-                  <p className="text-3xl font-black text-emerald-950 mt-1">
-                    ₹{estimates?.estimatedPoolFare || 360}
-                  </p>
-                  <p className="text-[11px] text-emerald-700 mt-1">🌱 4.8 kg CO₂ Carbon Emission Saved</p>
-                </div>
-
-                <button
-                  onClick={() => setShowRating(true)}
-                  className="w-full bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold py-3.5 rounded-2xl text-sm shadow-md"
-                >
-                  Rate Driver & Co-Riders
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
+        <button
+          onClick={() => setActiveTab("profile")}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            activeTab === "profile" ? "text-[var(--primary)] font-bold" : "text-[var(--muted)]"
+          }`}
+        >
+          <User className="w-5 h-5" />
+          <span className="text-[10px]">Profile</span>
+        </button>
+      </nav>
 
       {/* Modals */}
       <PaymentModal
@@ -1268,7 +1880,9 @@ export default function Home() {
         onClose={() => setShowSOS(false)}
         tripId={poolData?.trip?.id}
         userId={currentUser?.id}
-        vehicleDetails={poolData?.vehicle ? `${poolData.vehicle.model} (${poolData.vehicle.licensePlate})` : undefined}
+        vehicleDetails={
+          poolData?.vehicle ? `${poolData.vehicle.model} (${poolData.vehicle.licensePlate})` : undefined
+        }
       />
 
       <ShareTripModal

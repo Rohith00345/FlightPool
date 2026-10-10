@@ -5,8 +5,37 @@ import Navbar from "@/components/Navbar";
 import { ShieldCheck, Phone, CheckCircle } from "lucide-react";
 
 
+interface TripStop {
+  memberId: string;
+  dropoffOrder: number;
+  riderName?: string;
+  destinationAddress?: string;
+  destinationZone?: string;
+  arrivedAt?: string;
+}
+
+interface TripVehicle {
+  licensePlate?: string;
+  color?: string;
+  make?: string;
+  model?: string;
+}
+
+interface TripDriver {
+  name?: string;
+  phone?: string;
+  rating?: number;
+}
+
+interface TripData {
+  status: string;
+  vehicle?: TripVehicle;
+  driver?: TripDriver;
+  stops?: TripStop[];
+}
+
 function LiveTripContent({ id }: { id: string }) {
-  const [trip, setTrip] = useState<any>(null);
+  const [trip, setTrip] = useState<TripData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -73,7 +102,7 @@ function LiveTripContent({ id }: { id: string }) {
               Drop-off Route:
             </p>
             <div className="space-y-2">
-              {trip.stops?.map((stop: any) => (
+              {trip.stops?.map((stop: TripStop) => (
                 <div
                   key={stop.memberId}
                   className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex items-center justify-between"

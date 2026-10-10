@@ -1,7 +1,14 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "flightpool_super_secret_jwt_hmac_key_2026";
+export function getAuthSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("FATAL: SESSION_SECRET or AUTH_SECRET environment variable is required with no fallback.");
+  }
+  return secret;
+}
+
 export const COOKIE_NAME = "flightpool_session";
 
 export interface SessionPayload {
@@ -24,12 +31,13 @@ export function hashOtp(code: string): string {
 
 export async function checkOtpRateLimit(
   identifier: string,
-  ip?: string,
-  rawOtp?: string
+  ip?: string
 ): Promise<{ allowed: boolean; remaining: number }> {
   try {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const recentAttempts = await prisma.otpRequest.count({
+
+    // 1. Rate limit by phone / identifier (max 5 per 10 minutes)
+    const recentPhoneAttempts = await prisma.otpRequest.count({
       where: {
         phone: identifier,
         consumedAt: null,
@@ -37,28 +45,62 @@ export async function checkOtpRateLimit(
       },
     });
 
-    if (recentAttempts >= 5) {
+    if (recentPhoneAttempts >= 5) {
       return { allowed: false, remaining: 0 };
     }
 
-    // Persist this attempt in the database with SHA-256 hashed code
-    const codeToHash = rawOtp || (isDemoMode() ? "123456" : crypto.randomInt(100000, 999999).toString());
+    // 2. Rate limit by IP address (max 10 per 10 minutes)
+    if (ip && ip !== "127.0.0.1" && ip !== "::1") {
+      const recentIpAttempts = await prisma.otpRequest.count({
+        where: {
+          ip,
+          consumedAt: null,
+          createdAt: { gte: tenMinutesAgo },
+        },
+      });
+
+      if (recentIpAttempts >= 10) {
+        return { allowed: false, remaining: 0 };
+      }
+    }
+
+    // Persist this attempt in the database with a non-colliding token for rate tracking
     await prisma.otpRequest.create({
       data: {
         phone: identifier,
-        codeHash: hashOtp(codeToHash),
-        purpose: "login",
+        codeHash: hashOtp(crypto.randomBytes(16).toString("hex")),
+        purpose: "rate_limit_attempt",
         ip: ip || null,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
-    return { allowed: true, remaining: Math.max(0, 4 - recentAttempts) };
+    return { allowed: true, remaining: Math.max(0, 4 - recentPhoneAttempts) };
   } catch (err) {
     console.error("Database OTP rate limit check error:", err);
     // Fail open safely if DB transient error, but log it
     return { allowed: true, remaining: 5 };
   }
+}
+
+/**
+ * Creates a valid OTP record for dispatching to the user
+ */
+export async function createOtpRequestInDatabase(
+  identifier: string,
+  ip?: string
+): Promise<string> {
+  const code = isDemoMode() ? "123456" : crypto.randomInt(100000, 999999).toString();
+  await prisma.otpRequest.create({
+    data: {
+      phone: identifier,
+      codeHash: hashOtp(code),
+      purpose: "login",
+      ip: ip || null,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    },
+  });
+  return code;
 }
 
 export async function consumeOtpInDatabase(identifier: string): Promise<void> {
@@ -88,7 +130,7 @@ export function signSessionToken(payload: Omit<SessionPayload, "exp">, expiresIn
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(fullPayload)).toString("base64url");
-  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(payloadB64).digest("base64url");
+  const signature = crypto.createHmac("sha256", getAuthSecret()).update(payloadB64).digest("base64url");
 
   return `${payloadB64}.${signature}`;
 }
@@ -102,7 +144,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
     if (!payloadB64 || !signature) return null;
 
     const expectedSignature = crypto
-      .createHmac("sha256", AUTH_SECRET)
+      .createHmac("sha256", getAuthSecret())
       .update(payloadB64)
       .digest("base64url");
 
@@ -120,6 +162,50 @@ export function verifySessionToken(token: string): SessionPayload | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Validates Cross-Site Request Forgery (CSRF) for cookie-authenticated mutating requests.
+ * Explicit Authorization Bearer tokens are immune to ambient cookie CSRF attacks.
+ */
+export function validateCsrf(req: NextRequest | Request): boolean {
+  const authHeader = req.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return true;
+  }
+
+  // If there is no session cookie, there are no ambient credentials to forge
+  const cookieHeader = req.headers.get("cookie");
+  if (!cookieHeader || !cookieHeader.includes(COOKIE_NAME)) {
+    return true;
+  }
+
+  const method = req.method.toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) {
+    return true;
+  }
+
+  const origin = req.headers.get("origin");
+  const referer = req.headers.get("referer");
+  const host = req.headers.get("host");
+
+  if (origin && host) {
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
+  }
+
+  if (referer && host) {
+    try {
+      return new URL(referer).host === host;
+    } catch {
+      return false;
+    }
+  }
+
+  return process.env.NODE_ENV !== "production";
 }
 
 /**
@@ -167,6 +253,16 @@ export function requireRole(
       response: NextResponse.json(
         { error: "Authentication required", message: "Missing or invalid session credentials" },
         { status: 401 }
+      ),
+    };
+  }
+
+  if (!validateCsrf(req)) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "Forbidden", message: "Cross-Site Request Forgery validation failed" },
+        { status: 403 }
       ),
     };
   }

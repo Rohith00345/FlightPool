@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, QrCode, Shield, CheckCircle2, X, Lock, Sparkles, Smartphone } from "lucide-react";
+import { CreditCard, Shield, CheckCircle2, X, Lock, Sparkles, Smartphone } from "lucide-react";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -135,7 +135,7 @@ export default function PaymentModal({
                     key={app.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedUpiApp(app.id as any);
+                      setSelectedUpiApp(app.id as "GPAY" | "PHONEPE" | "PAYTM" | "CRED");
                     }}
                     className={`py-1 text-center rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
                       selectedUpiApp === app.id
