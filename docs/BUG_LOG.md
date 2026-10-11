@@ -11,12 +11,12 @@ This log tracks every defect identified across the QA and UI audit cycles, prior
 ## Bug Inventory
 
 | Bug ID | Pri | Category | Page / Route | Summary | Status |
-| :--- | :---: | :--- | :--- | :--- | :---: |
-| **BUG-01** | **P0** | Database Drift | Live Neon DB / APIs | Vercel production logs returned 500 on `/api/rides/request`, `/api/admin/metrics`, `/api/admin/simulate-flight`, and `/api/driver/trips` due to unapplied migrations on Neon. | Investigating / QA-1 |
-| **BUG-02** | **P0** | Migration Drift | `prisma/migrations` | Need to verify zero drift between `schema.prisma` and versioned migration files using shadow DB diff. | Scheduled (QA-1) |
-| **BUG-03** | **P1** | Connection Leak | `lib/prisma.ts` | `PrismaClient` only cached on `globalThis` when `NODE_ENV !== "production"`, causing connection pool exhaustion during production server runs. | Fixed ✅ |
-| **BUG-04** | **P2** | Check Tooling | `tests/db-guard.test.ts` | Preflight regex captured `[` from IPv6 connection string with dummy credentials, triggering false positive remote host alert. | Fixed ✅ |
-| **BUG-05** | **P1** | Rider Journey | `/` (Home) | Need exploratory verification: Corridor step advancing to Pool step on "I've landed & ready". | Investigating (QA-2) |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **BUG-01** | **P0** | Database Drift | Live Neon DB / APIs | Vercel production logs returned 500 on `/api/rides/request`, `/api/admin/metrics`, `/api/admin/simulate-flight`, and `/api/driver/trips` due to unapplied migrations on Neon. | Fixed & Verified ✅ |
+| **BUG-02** | **P0** | Migration Drift | `prisma/migrations` | Need to verify zero drift between `schema.prisma` and versioned migration files using shadow DB diff. | Fixed & Verified ✅ |
+| **BUG-03** | **P1** | Connection Leak | `lib/prisma.ts` | `PrismaClient` only cached on `globalThis` when `NODE_ENV !== "production"`, causing connection pool exhaustion during production server runs. | Fixed & Verified ✅ |
+| **BUG-04** | **P2** | Check Tooling | `tests/db-guard.test.ts` | Preflight regex captured `[` from IPv6 connection string with dummy credentials, triggering false positive remote host alert. | Fixed & Verified ✅ |
+| **BUG-05** | **P1** | Rider Journey | `/` (Home) | Verified: Corridor step advancing to Pool state on "I've landed & ready" via `handleRequestRide` and `setStep("RIDE_STATE")`. | Fixed & Verified ✅ |
 
 ---
 
