@@ -218,6 +218,25 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - TypeScript (`tsc --noEmit`): 0 errors.
   - ESLint (`npm run lint`): 0 errors.
   - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).---
+
+## Phase 2.7 (Scale Features): GST Invoicing, Trip Receipts & Rider History API
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **GST Compliant Tax Breakdown Engine**:
+     - `lib/invoice.ts`: Implemented `calculateGstBreakdown` and `generateTripReceipt` for HSN/SAC 996412 (Passenger transport service via e-commerce operator). Enforces 5% GST (2.5% CGST + 2.5% SGST intra-state Maharashtra, 0% IGST) computed in strict integer paise precision. Formats legal tax invoice IDs (`INV-YYYY-XXXXXX`) with company GSTIN (`27AABCF1234F1Z8`) and verified breakdown.
+  2. **Trip Receipt Endpoint with Anti-IDOR Defense**:
+     - `app/api/trips/[id]/receipt/route.ts`: Secure `GET` endpoint returning complete tax invoice data. Enforces cross-user IDOR access protection: riders can only access receipts for trips where they were a confirmed pool member; dispatchers and admins retain audit access.
+  3. **Rider Trip History API**:
+     - `app/api/user/trips/route.ts`: `GET` endpoint returning historical trips for the authenticated rider, including corridor, terminal, driver and vehicle details, and direct receipt download links.
+  4. **Test Suite Coverage**:
+     - `tests/receipts.test.ts`: 7 tests covering tax calculation precision, structured invoice generation, authentication enforcement (401), cross-user IDOR protection (403), passenger access (200), admin override (200), and rider trip history (200).
+- **Verification Results**:
+  - Unit/Integration Tests: 18 suites / 141 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
   - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
-
-
