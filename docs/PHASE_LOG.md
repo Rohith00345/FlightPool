@@ -200,3 +200,24 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
   - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
 
+---
+
+## Phase 2.6 (Scale Features): Feature Flags, Experimentation Engine & Remote Configuration
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Feature Flags & Rollout Engine**:
+     - `lib/config/feature-flags.ts`: Built deterministic user-bucketing engine (`calculateUserBucket` via SHA-256 modulo 100). Implemented baseline feature flags (`PRE_LANDING_QUEUE`, `WOMEN_ONLY_POOLS`, `DYNAMIC_SURGE_PRICING`, `GREEN_MILES_REWARDS`, `CASHFREE_GATEWAY`, `EXPRESS_BAY_PRIORITY`) with percentage rollouts, role gating, and runtime override registry (`updateFeatureFlag`, `resetFeatureFlagOverrides`).
+     - `app/api/config/flags/route.ts`: Public/rider endpoint evaluating feature flag states for current client or signed-in rider.
+     - `app/api/admin/flags/route.ts`: Admin console endpoint supporting `GET` (full configuration list) and `PATCH` (dynamic rollout percentage and enable/disable adjustments) protected by `ADMIN` RBAC.
+     - `tests/feature-flags.test.ts`: 12 comprehensive unit and integration tests verifying deterministic hashing, percentage gating, role restrictions, anonymous endpoints, and admin configuration endpoints.
+- **Verification Results**:
+  - Unit/Integration Tests: 17 suites / 134 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+
+
