@@ -214,8 +214,21 @@ export async function joinDriverQueue(params: {
       assignedBay,
       terminalCode: terminal,
     };
-  } catch {
-    // In-memory fallback if DB unavailable
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[DriverQueue] Database write failure during joinDriverQueue:", err);
+      return {
+        success: false,
+        position: 0,
+        totalInQueue: 0,
+        estimatedWaitMin: 0,
+        assignedBay: "",
+        terminalCode: terminal,
+        error: "Database error: unable to queue driver. Please retry.",
+      };
+    }
+
+    // In-memory fallback ONLY when NODE_ENV is "test"
     const queue = queueRegistry[terminal];
     leaveInMemory(params.driverId);
 
@@ -312,27 +325,32 @@ export async function getDriverQueueStatus(driverId: string): Promise<{
         joinedAt: entry.joinedAt.toISOString(),
       };
     }
-  } catch {
-    // fallback below
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[DriverQueue] Database query failure during getDriverQueueStatus:", err);
+      return { inQueue: false };
+    }
   }
 
-  // Fallback to in-memory check
-  for (const terminal of ["T2", "T1"] as const) {
-    const queue = queueRegistry[terminal];
-    const index = queue.findIndex((e) => e.driverId === driverId);
-    if (index !== -1) {
-      const entry = queue[index];
-      entry.lastHeartbeatAt = new Date();
-      const position = index + 1;
-      return {
-        inQueue: true,
-        position,
-        totalInQueue: queue.length,
-        estimatedWaitMin: Math.max(3, position * 4),
-        assignedBay: entry.assignedBay,
-        terminalCode: terminal,
-        joinedAt: entry.joinedAt.toISOString(),
-      };
+  // Fallback to in-memory check ONLY when NODE_ENV is "test"
+  if (process.env.NODE_ENV === "test") {
+    for (const terminal of ["T2", "T1"] as const) {
+      const queue = queueRegistry[terminal];
+      const index = queue.findIndex((e) => e.driverId === driverId);
+      if (index !== -1) {
+        const entry = queue[index];
+        entry.lastHeartbeatAt = new Date();
+        const position = index + 1;
+        return {
+          inQueue: true,
+          position,
+          totalInQueue: queue.length,
+          estimatedWaitMin: Math.max(3, position * 4),
+          assignedBay: entry.assignedBay,
+          terminalCode: terminal,
+          joinedAt: entry.joinedAt.toISOString(),
+        };
+      }
     }
   }
 
@@ -349,11 +367,14 @@ export async function leaveDriverQueue(driverId: string): Promise<{ success: boo
       where: { driverId },
     });
     dbRemoved = deleted.count > 0;
-  } catch {
-    // DB error handled by fallback
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[DriverQueue] Database delete failure during leaveDriverQueue:", err);
+      return { success: false };
+    }
   }
 
-  const memRemoved = leaveInMemory(driverId);
+  const memRemoved = process.env.NODE_ENV === "test" ? leaveInMemory(driverId) : false;
   return { success: dbRemoved || memRemoved };
 }
 
@@ -380,11 +401,14 @@ export async function getTerminalQueue(terminalCode: "T1" | "T2"): Promise<Drive
         lng: e.lng,
       }));
     }
-  } catch {
-    // fallback
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[DriverQueue] Database query failure during getTerminalQueue:", err);
+      return [];
+    }
   }
 
-  return [...queueRegistry[terminalCode]];
+  return process.env.NODE_ENV === "test" ? [...queueRegistry[terminalCode]] : [];
 }
 
 /**

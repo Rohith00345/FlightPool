@@ -103,7 +103,11 @@ export async function getUserEmergencyContacts(userId: string): Promise<Emergenc
       consentConfirmedAt: r.consentConfirmedAt?.toISOString() || null,
       createdAt: r.createdAt.toISOString(),
     }));
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[EmergencyContacts] Database query failure in getUserEmergencyContacts:", err);
+      return [];
+    }
     return userContactsStore.get(userId) || [];
   }
 }
@@ -250,8 +254,17 @@ export async function addEmergencyContact(params: {
     const optInMessage = `[FlightPool MOCK SMS] You have been listed as an emergency safety contact by a FlightPool rider. Reply YES to confirm, or STOP to opt out. (Mock SMS - no actual telecom dispatch)`;
 
     return { success: true, contact, optInMessage };
-  } catch {
-    // In-memory fallback
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[EmergencyContacts] Database write failure in addEmergencyContact:", err);
+      return {
+        success: false,
+        error: "Database error: unable to save emergency contact. Please retry.",
+        statusCode: 500,
+      };
+    }
+
+    // In-memory fallback ONLY when NODE_ENV is "test"
     const existing = userContactsStore.get(params.userId) || [];
     if (existing.length >= 3) {
       return {
@@ -297,26 +310,37 @@ export async function updateContactConsent(params: {
 }): Promise<{ success: boolean; consentStatus: string; error?: string }> {
   const targetStatus = params.consentAction === "CONFIRM" ? "CONSENTED" : "OPTED_OUT";
   try {
-    await prisma.emergencyContact.updateMany({
+    const updated = await prisma.emergencyContact.updateMany({
       where: { id: params.contactId, userId: params.userId },
       data: {
         consentStatus: targetStatus,
         consentConfirmedAt: params.consentAction === "CONFIRM" ? new Date() : null,
       },
     });
-  } catch {
-    // fallback
+    if (process.env.NODE_ENV !== "test") {
+      if (updated.count === 0) {
+        return { success: false, consentStatus: targetStatus, error: "Contact not found" };
+      }
+      return { success: true, consentStatus: targetStatus };
+    }
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[EmergencyContacts] Database update failure in updateContactConsent:", err);
+      return { success: false, consentStatus: targetStatus, error: "Database error" };
+    }
   }
 
-  // Update in-memory fallback
-  const list = userContactsStore.get(params.userId) || [];
-  const item = list.find((c) => c.id === params.contactId);
-  if (item) {
-    item.consentStatus = targetStatus;
-    if (params.consentAction === "CONFIRM") {
-      item.consentConfirmedAt = new Date().toISOString();
+  // Update in-memory fallback ONLY when NODE_ENV is "test"
+  if (process.env.NODE_ENV === "test") {
+    const list = userContactsStore.get(params.userId) || [];
+    const item = list.find((c) => c.id === params.contactId);
+    if (item) {
+      item.consentStatus = targetStatus;
+      if (params.consentAction === "CONFIRM") {
+        item.consentConfirmedAt = new Date().toISOString();
+      }
+      return { success: true, consentStatus: targetStatus };
     }
-    return { success: true, consentStatus: targetStatus };
   }
 
   return { success: true, consentStatus: targetStatus };
@@ -335,16 +359,25 @@ export async function removeEmergencyContact(
       where: { userId, id: contactId },
     });
     dbRemoved = deleted.count > 0;
-  } catch {
-    // fallback
+    if (process.env.NODE_ENV !== "test") {
+      return { success: dbRemoved };
+    }
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[EmergencyContacts] Database delete failure in removeEmergencyContact:", err);
+      return { success: false };
+    }
   }
 
-  const existing = userContactsStore.get(userId) || [];
-  const filtered = existing.filter((c) => c.id !== contactId);
-  const memRemoved = filtered.length !== existing.length;
-  if (memRemoved) {
-    userContactsStore.set(userId, filtered);
-  }
+  const memRemoved = process.env.NODE_ENV === "test" ? (function() {
+    const existing = userContactsStore.get(userId) || [];
+    const filtered = existing.filter((c) => c.id !== contactId);
+    const removed = filtered.length !== existing.length;
+    if (removed) {
+      userContactsStore.set(userId, filtered);
+    }
+    return removed;
+  })() : false;
 
   return { success: dbRemoved || memRemoved };
 }
