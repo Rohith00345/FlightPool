@@ -92,8 +92,9 @@ npm run verify      # Runs complete TypeScript, ESLint, and Vitest test suites
 
 ### 2. Run Test Suites
 ```bash
-npm test            # Runs 66 unit & integration tests
-npx playwright test # Runs complete e2e browser test suite
+npm test            # Runs 172 unit & integration tests across 20 test suites
+npx playwright test # Runs complete e2e browser test suite (56 tests)
+npm run test:smoke  # Runs universal smoke suite (local or SMOKE_BASE_URL)
 ```
 
 ### 3. Run Development Server

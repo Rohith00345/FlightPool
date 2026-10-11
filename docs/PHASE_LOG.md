@@ -262,3 +262,31 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - TypeScript (`tsc --noEmit`): 0 errors.
   - ESLint (`npm run lint`): 0 errors.
   - `node scripts/preflight.mjs`: `RESULT: OK` (10 passed, 0 failed).
+
+---
+
+## Phase R0 to R8: Production Release Engineering & Live Deployment (`release-2026-10-11`)
+
+- **Status**: Completed ✅
+- **Release Target**: `https://flight-pool-red.vercel.app` (Neon PostgreSQL)
+- **Baseline Git Tag**: `live-stable-2026-10-11` (Commit `8f7fd4a`)
+- **Release Commit**: `18c03a2` (on `main`)
+- **Deliverables**:
+  1. **Phase R0 & R1 (Baseline & Integration)**: Tagged immutable baseline `live-stable-2026-10-11` on `main`. Created `release-2026-10-11` and cleanly fast-forward merged `phase-2-pre-landing`.
+  2. **Phase R2 (Schema Drift Elimination)**: Generated additive migration `20261011142006_add_driver_queue_and_emergency_contacts`. Verified 0 schema drift using local shadow database.
+  3. **Phase R3 (Persistence & Production Fail-Closed)**: Enforced persistent PostgreSQL storage for driver queue and emergency contacts. Eliminated in-memory fallback in production (allowed strictly when `NODE_ENV === "test"`). Added automated regression tests proving fail-closed protection.
+  4. **Phase R4 (E2E Flakiness Audit & CI Workflow)**: Executed Playwright suite 3 consecutive times with 100% pass rate (56/56 passing, 0 flaky tests). Created universal smoke suite (`tests/smoke/smoke.spec.ts`) and updated `.github/workflows/ci.yml`.
+  5. **Phase R5 (Release Gate)**: Verified all release criteria, `node scripts/verify.mjs` PASSED (`RESULT: OK`).
+  6. **Phase R6 (Live Database Backup & Migration)**:
+     - Backed up live Neon database to `backups/live_backup_2026-10-11T15-26-19-656Z.dump` (95,175 bytes) using Dockerized PostgreSQL 18.6 matching server version.
+     - Inspected unapplied migrations: exactly 1 pending migration (`20261011142006`), verified 100% additive with 0 drops/renames/truncates.
+     - Executed `node scripts/migrate-live.mjs` applying migration to live Neon database without resets.
+     - Verified `npx prisma migrate status` confirms "Database schema is up to date".
+  7. **Phase R7 (Merge, Deploy & Smoke)**:
+     - Fast-forward merged `release-2026-10-11` into `main` and pushed to `origin/main`.
+     - Monitored Vercel automatic build and deployment until live.
+     - Executed universal live smoke suite: 5/5 passing in 15.6s against `https://flight-pool-red.vercel.app`.
+  8. **Phase R8 (Visual Proof & Final Sign-Off)**:
+     - Captured live production screenshot `docs/screenshots/live-production-landing.png`.
+     - Authored and committed `docs/FINAL_RELEASE_REPORT.md`.
+
