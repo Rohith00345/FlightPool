@@ -114,286 +114,408 @@ export const GATE_TRIVIA_QUESTIONS: GateTriviaQuestion[] = [
   },
 ];
 
-export function getGamificationState(): GamificationState {
-  const isDemo = isClientDemoMode();
+export type FlightScoreTier = "Taxi" | "Takeoff" | "Cruise" | "Jet Stream" | "Supersonic";
+export type AviationRank = "Ground Crew" | "Cadet" | "First Officer" | "Captain" | "Commander" | "Ace";
 
-  if (!isDemo) {
+export function getScoreTier(score: number): { tier: FlightScoreTier; perk: string } {
+  if (score >= 850) {
+    return { tier: "Supersonic", perk: "Express Marshal Bay priority & 10% ride credit rebate" };
+  }
+  if (score >= 700) {
+    return { tier: "Jet Stream", perk: "Priority bay queue & 5% ride credit rebate" };
+  }
+  if (score >= 500) {
+    return { tier: "Cruise", perk: "Complimentary Zero-Detour Token once per month" };
+  }
+  if (score >= 300) {
+    return { tier: "Takeoff", perk: "Unlock Green Miles badge tracker and co-rider matching" };
+  }
+  return { tier: "Taxi", perk: "Standard Mumbai airport pool access" };
+}
+
+export function getRankForXp(xp: number): { rank: AviationRank; nextLevelXp: number } {
+  if (xp >= 5000) return { rank: "Ace", nextLevelXp: 5000 };
+  if (xp >= 3500) return { rank: "Commander", nextLevelXp: 5000 };
+  if (xp >= 2400) return { rank: "Captain", nextLevelXp: 3500 };
+  if (xp >= 1200) return { rank: "First Officer", nextLevelXp: 2400 };
+  if (xp >= 500) return { rank: "Cadet", nextLevelXp: 1200 };
+  return { rank: "Ground Crew", nextLevelXp: 500 };
+}
+
+export const UNAVAILABLE_GAMIFICATION_STATE: GamificationState = {
+  enabled: false,
+  flightScore: 0,
+  tierName: "Taxi",
+  tierPerk: "Rewards coming soon",
+  xp: 0,
+  xpNextLevel: 500,
+  rankName: "Ground Crew",
+  milesBalance: 0,
+  scoreCategories: [],
+  recentScoreEvents: [],
+  quests: [],
+  badges: [],
+  passportStamps: [],
+  rewardsCatalog: [],
+  leaderboard: [],
+  triviaQuestions: [],
+};
+
+export const MOCK_GAMIFICATION_STATE: GamificationState = {
+  enabled: true,
+  flightScore: 840, // 0 - 1000 gauge
+  tierName: "Jet Stream",
+  tierPerk: "Express Marshal Bay priority & 10% ride credit rebate",
+  xp: 2450,
+  xpNextLevel: 3500,
+  rankName: "Captain",
+  milesBalance: 1420,
+  scoreCategories: [
+    {
+      name: "Reliability",
+      weight: 30,
+      maxScore: 300,
+      currentScore: 285,
+      description: "On-time OTP validation at airport bay & zero no-shows",
+    },
+    {
+      name: "Community",
+      weight: 25,
+      maxScore: 250,
+      currentScore: 230,
+      description: "Co-rider ratings and positive courtesy feedback",
+    },
+    {
+      name: "Safety",
+      weight: 20,
+      maxScore: 200,
+      currentScore: 195,
+      description: "Clean ride verification and verified identity",
+    },
+    {
+      name: "Loyalty",
+      weight: 15,
+      maxScore: 150,
+      currentScore: 80,
+      description: "Frequent Mumbai terminal pool completions",
+    },
+    {
+      name: "Profile",
+      weight: 10,
+      maxScore: 100,
+      currentScore: 50,
+      description: "Boarding pass verification & account completion",
+    },
+  ],
+  recentScoreEvents: [
+    {
+      id: "ev_1",
+      reason: "Instant OTP verification at T2 Bay B",
+      delta: +15,
+      timestamp: "Yesterday",
+      category: "Reliability",
+    },
+    {
+      id: "ev_2",
+      reason: "Co-pilot kudos sticker from Priya N.",
+      delta: +20,
+      timestamp: "Yesterday",
+      category: "Community",
+    },
+    {
+      id: "ev_3",
+      reason: "Completed shared ride to Thane",
+      delta: +15,
+      timestamp: "3 days ago",
+      category: "Loyalty",
+    },
+    {
+      id: "ev_4",
+      reason: "Boarding pass verified via PNR",
+      delta: +25,
+      timestamp: "5 days ago",
+      category: "Profile",
+    },
+  ],
+  quests: [
+    {
+      id: "q_1",
+      title: "Thane Corridor Pioneer",
+      description: "Complete 3 shared rides heading towards Thane",
+      type: "TRIP",
+      progress: 2,
+      target: 3,
+      rewardMiles: 250,
+      isCompleted: false,
+      hasStreakFreeze: true,
+    },
+    {
+      id: "q_2",
+      title: "Clean Air Mumbai",
+      description: "Prevent 50 kg of CO₂ through airport shared rides",
+      type: "SEASON",
+      progress: 38,
+      target: 50,
+      rewardMiles: 500,
+      isCompleted: false,
+      hasStreakFreeze: true,
+    },
+  ],
+  badges: [
+    {
+      id: "b_first_landing",
+      title: "First Landing",
+      description: "Completed first shared cab trip from BOM Airport",
+      icon: "🛬",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_boarding_buddy",
+      title: "Boarding Buddy",
+      description: "Shared ride with 2+ verified passengers from same flight",
+      icon: "🤝",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_mumbai_explorer",
+      title: "Mumbai Explorer",
+      description: "Traveled to 3 different corridor zones",
+      icon: "🗺️",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_night_owl",
+      title: "Night Owl Safe",
+      description: "Completed safe night journey with live SOS tracking",
+      icon: "🦉",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_green_miles",
+      title: "Green Miles",
+      description: "Saved over 25 kg of carbon emissions",
+      icon: "🌱",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_quick_boarder",
+      title: "Quick Boarder",
+      description: "Validated PIN code within 2 minutes of reaching bay",
+      icon: "⚡",
+      isUnlocked: true,
+      unlockedAt: "Oct 2026",
+    },
+    {
+      id: "b_copilot",
+      title: "Co-pilot",
+      description: "Earned 5 positive co-rider kudos tags",
+      icon: "✈️",
+      isUnlocked: false,
+    },
+    {
+      id: "b_frequent_flyer",
+      title: "Frequent Flyer",
+      description: "Completed 10 rides in a single season",
+      icon: "🌟",
+      isUnlocked: false,
+    },
+  ],
+  passportStamps: [
+    {
+      zone: "Thane",
+      terminal: "T2",
+      flightCode: "6E-204",
+      stampedAt: "10 Oct 2026",
+    },
+    {
+      zone: "Powai",
+      terminal: "T2",
+      flightCode: "AI-865",
+      stampedAt: "08 Oct 2026",
+    },
+    {
+      zone: "Bandra",
+      terminal: "T1",
+      flightCode: "QP-1102",
+      stampedAt: "04 Oct 2026",
+    },
+  ],
+  rewardsCatalog: [
+    {
+      id: "rw_100",
+      title: "₹100 Airport Cab Credit",
+      costMiles: 500,
+      discountRupees: 100,
+      description: "Deducted automatically from your next shared cab fare",
+      type: "RIDE_CREDIT",
+    },
+    {
+      id: "rw_250",
+      title: "₹250 Airport Cab Credit",
+      costMiles: 1200,
+      discountRupees: 250,
+      description: "Deducted automatically from your next shared cab fare",
+      type: "RIDE_CREDIT",
+    },
+    {
+      id: "rw_detour",
+      title: "Zero-Detour Token",
+      costMiles: 800,
+      discountRupees: 0,
+      description: "Guarantees first drop-off order on your next shared pool",
+      type: "PERK",
+    },
+    {
+      id: "rw_bay",
+      title: "Express Bay Priority",
+      costMiles: 650,
+      discountRupees: 0,
+      description: "Priority staging line access at airport Terminal 2",
+      type: "PERK",
+    },
+  ],
+  leaderboard: [
+    {
+      rank: 1,
+      nickname: "SkyRunner99",
+      greenMiles: 340,
+      co2SavedKg: 85.2,
+      isCurrentUser: false,
+    },
+    {
+      rank: 2,
+      nickname: "BOM_Captain_A",
+      greenMiles: 295,
+      co2SavedKg: 73.8,
+      isCurrentUser: true,
+    },
+    {
+      rank: 3,
+      nickname: "WesternExpress",
+      greenMiles: 260,
+      co2SavedKg: 65.0,
+      isCurrentUser: false,
+    },
+    {
+      rank: 4,
+      nickname: "NightOwlBOM",
+      greenMiles: 215,
+      co2SavedKg: 53.7,
+      isCurrentUser: false,
+    },
+    {
+      rank: 5,
+      nickname: "PowaiCommuter",
+      greenMiles: 190,
+      co2SavedKg: 47.5,
+      isCurrentUser: false,
+    },
+  ],
+  triviaQuestions: GATE_TRIVIA_QUESTIONS,
+};
+
+export interface GamificationProvider {
+  getScore(): Promise<{ score: number; tier: FlightScoreTier; perk: string; categories: ScoreCategory[]; events: ScoreEvent[] }>;
+  getXp(): Promise<{ xp: number; rank: AviationRank; nextLevelXp: number }>;
+  getMiles(): Promise<number>;
+  getBadges(): Promise<BadgeItem[]>;
+  getQuests(): Promise<QuestItem[]>;
+  getPassport(): Promise<PassportStamp[]>;
+  getLeaderboard(): Promise<LeaderboardEntry[]>;
+  getRewards(): Promise<RewardCatalogItem[]>;
+  getState(): GamificationState;
+}
+
+export class MockGamificationProvider implements GamificationProvider {
+  getState(): GamificationState {
+    return MOCK_GAMIFICATION_STATE;
+  }
+  async getScore() {
     return {
-      enabled: false,
-      flightScore: 0,
-      tierName: "Taxi",
-      tierPerk: "Rewards coming soon",
-      xp: 0,
-      xpNextLevel: 500,
-      rankName: "Ground Crew",
-      milesBalance: 0,
-      scoreCategories: [],
-      recentScoreEvents: [],
-      quests: [],
-      badges: [],
-      passportStamps: [],
-      rewardsCatalog: [],
-      leaderboard: [],
-      triviaQuestions: [],
+      score: MOCK_GAMIFICATION_STATE.flightScore,
+      tier: MOCK_GAMIFICATION_STATE.tierName,
+      perk: MOCK_GAMIFICATION_STATE.tierPerk,
+      categories: MOCK_GAMIFICATION_STATE.scoreCategories,
+      events: MOCK_GAMIFICATION_STATE.recentScoreEvents,
     };
   }
+  async getXp() {
+    return {
+      xp: MOCK_GAMIFICATION_STATE.xp,
+      rank: MOCK_GAMIFICATION_STATE.rankName,
+      nextLevelXp: MOCK_GAMIFICATION_STATE.xpNextLevel,
+    };
+  }
+  async getMiles() {
+    return MOCK_GAMIFICATION_STATE.milesBalance;
+  }
+  async getBadges() {
+    return MOCK_GAMIFICATION_STATE.badges;
+  }
+  async getQuests() {
+    return MOCK_GAMIFICATION_STATE.quests;
+  }
+  async getPassport() {
+    return MOCK_GAMIFICATION_STATE.passportStamps;
+  }
+  async getLeaderboard() {
+    return MOCK_GAMIFICATION_STATE.leaderboard;
+  }
+  async getRewards() {
+    return MOCK_GAMIFICATION_STATE.rewardsCatalog;
+  }
+}
 
-  // Realistic mock gamification profile when DEMO_MODE === "true"
-  return {
-    enabled: true,
-    flightScore: 840, // 0 - 1000 gauge
-    tierName: "Supersonic",
-    tierPerk: "Express Marshal Bay priority & 10% ride credit rebate",
-    xp: 2450,
-    xpNextLevel: 3500,
-    rankName: "Captain",
-    milesBalance: 1420,
-    scoreCategories: [
-      {
-        name: "Reliability",
-        weight: 30,
-        maxScore: 300,
-        currentScore: 285,
-        description: "On-time OTP validation at airport bay & zero no-shows",
-      },
-      {
-        name: "Community",
-        weight: 25,
-        maxScore: 250,
-        currentScore: 230,
-        description: "Co-rider ratings and positive courtesy feedback",
-      },
-      {
-        name: "Safety",
-        weight: 20,
-        maxScore: 200,
-        currentScore: 195,
-        description: "Clean ride verification and verified identity",
-      },
-      {
-        name: "Loyalty",
-        weight: 15,
-        maxScore: 150,
-        currentScore: 80,
-        description: "Frequent Mumbai terminal pool completions",
-      },
-      {
-        name: "Profile",
-        weight: 10,
-        maxScore: 100,
-        currentScore: 50,
-        description: "Boarding pass verification & account completion",
-      },
-    ],
-    recentScoreEvents: [
-      {
-        id: "ev_1",
-        reason: "Instant OTP verification at T2 Bay B",
-        delta: +15,
-        timestamp: "Yesterday",
-        category: "Reliability",
-      },
-      {
-        id: "ev_2",
-        reason: "Co-pilot kudos sticker from Priya N.",
-        delta: +20,
-        timestamp: "Yesterday",
-        category: "Community",
-      },
-      {
-        id: "ev_3",
-        reason: "Completed shared ride to Thane",
-        delta: +15,
-        timestamp: "3 days ago",
-        category: "Loyalty",
-      },
-      {
-        id: "ev_4",
-        reason: "Boarding pass verified via PNR",
-        delta: +25,
-        timestamp: "5 days ago",
-        category: "Profile",
-      },
-    ],
-    quests: [
-      {
-        id: "q_1",
-        title: "Thane Corridor Pioneer",
-        description: "Complete 3 shared rides heading towards Thane",
-        type: "TRIP",
-        progress: 2,
-        target: 3,
-        rewardMiles: 250,
-        isCompleted: false,
-        hasStreakFreeze: true,
-      },
-      {
-        id: "q_2",
-        title: "Clean Air Mumbai",
-        description: "Prevent 50 kg of CO₂ through airport shared rides",
-        type: "SEASON",
-        progress: 38,
-        target: 50,
-        rewardMiles: 500,
-        isCompleted: false,
-        hasStreakFreeze: true,
-      },
-    ],
-    badges: [
-      {
-        id: "b_first_landing",
-        title: "First Landing",
-        description: "Completed first shared cab trip from BOM Airport",
-        icon: "🛬",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_boarding_buddy",
-        title: "Boarding Buddy",
-        description: "Shared ride with 2+ verified passengers from same flight",
-        icon: "🤝",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_mumbai_explorer",
-        title: "Mumbai Explorer",
-        description: "Traveled to 3 different corridor zones",
-        icon: "🗺️",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_night_owl",
-        title: "Night Owl Safe",
-        description: "Completed safe night journey with live SOS tracking",
-        icon: "🦉",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_green_miles",
-        title: "Green Miles",
-        description: "Saved over 25 kg of carbon emissions",
-        icon: "🌱",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_quick_boarder",
-        title: "Quick Boarder",
-        description: "Validated PIN code within 2 minutes of reaching bay",
-        icon: "⚡",
-        isUnlocked: true,
-        unlockedAt: "Oct 2026",
-      },
-      {
-        id: "b_copilot",
-        title: "Co-pilot",
-        description: "Earned 5 positive co-rider kudos tags",
-        icon: "✈️",
-        isUnlocked: false,
-      },
-      {
-        id: "b_frequent_flyer",
-        title: "Frequent Flyer",
-        description: "Completed 10 rides in a single season",
-        icon: "🌟",
-        isUnlocked: false,
-      },
-    ],
-    passportStamps: [
-      {
-        zone: "Thane",
-        terminal: "T2",
-        flightCode: "6E-204",
-        stampedAt: "10 Oct 2026",
-      },
-      {
-        zone: "Powai",
-        terminal: "T2",
-        flightCode: "AI-865",
-        stampedAt: "08 Oct 2026",
-      },
-      {
-        zone: "Bandra",
-        terminal: "T1",
-        flightCode: "QP-1102",
-        stampedAt: "04 Oct 2026",
-      },
-    ],
-    rewardsCatalog: [
-      {
-        id: "rw_100",
-        title: "₹100 Airport Cab Credit",
-        costMiles: 500,
-        discountRupees: 100,
-        description: "Deducted automatically from your next shared cab fare",
-        type: "RIDE_CREDIT",
-      },
-      {
-        id: "rw_250",
-        title: "₹250 Airport Cab Credit",
-        costMiles: 1200,
-        discountRupees: 250,
-        description: "Deducted automatically from your next shared cab fare",
-        type: "RIDE_CREDIT",
-      },
-      {
-        id: "rw_detour",
-        title: "Zero-Detour Token",
-        costMiles: 800,
-        discountRupees: 0,
-        description: "Guarantees first drop-off order on your next shared pool",
-        type: "PERK",
-      },
-      {
-        id: "rw_bay",
-        title: "Express Bay Priority",
-        costMiles: 650,
-        discountRupees: 0,
-        description: "Priority staging line access at airport Terminal 2",
-        type: "PERK",
-      },
-    ],
-    leaderboard: [
-      {
-        rank: 1,
-        nickname: "SkyRunner99",
-        greenMiles: 340,
-        co2SavedKg: 85.2,
-        isCurrentUser: false,
-      },
-      {
-        rank: 2,
-        nickname: "BOM_Captain_A",
-        greenMiles: 295,
-        co2SavedKg: 73.8,
-        isCurrentUser: true,
-      },
-      {
-        rank: 3,
-        nickname: "WesternExpress",
-        greenMiles: 260,
-        co2SavedKg: 65.0,
-        isCurrentUser: false,
-      },
-      {
-        rank: 4,
-        nickname: "NightOwlBOM",
-        greenMiles: 215,
-        co2SavedKg: 53.7,
-        isCurrentUser: false,
-      },
-      {
-        rank: 5,
-        nickname: "PowaiCommuter",
-        greenMiles: 190,
-        co2SavedKg: 47.5,
-        isCurrentUser: false,
-      },
-    ],
-    triviaQuestions: GATE_TRIVIA_QUESTIONS,
-  };
+export class UnavailableGamificationProvider implements GamificationProvider {
+  getState(): GamificationState {
+    return UNAVAILABLE_GAMIFICATION_STATE;
+  }
+  async getScore() {
+    return {
+      score: 0,
+      tier: "Taxi" as const,
+      perk: "Rewards coming soon",
+      categories: [],
+      events: [],
+    };
+  }
+  async getXp() {
+    return {
+      xp: 0,
+      rank: "Ground Crew" as const,
+      nextLevelXp: 500,
+    };
+  }
+  async getMiles() {
+    return 0;
+  }
+  async getBadges() {
+    return [];
+  }
+  async getQuests() {
+    return [];
+  }
+  async getPassport() {
+    return [];
+  }
+  async getLeaderboard() {
+    return [];
+  }
+  async getRewards() {
+    return [];
+  }
+}
+
+export function getGamificationProvider(explicitDemo?: boolean): GamificationProvider {
+  const isDemo = explicitDemo !== undefined ? explicitDemo : isClientDemoMode();
+  return isDemo ? new MockGamificationProvider() : new UnavailableGamificationProvider();
+}
+
+export function getGamificationState(explicitDemo?: boolean): GamificationState {
+  return getGamificationProvider(explicitDemo).getState();
 }

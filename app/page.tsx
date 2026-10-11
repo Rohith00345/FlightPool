@@ -536,6 +536,8 @@ export default function Home() {
         onSOSClick={() => setShowSOS(true)}
         currentLanguage={language}
         onLanguageChange={(l) => setLanguage(l)}
+        activeTab={activeTab}
+        onTabChange={(t) => setActiveTab(t)}
       />
 
       {/* Main Content Area */}
@@ -555,8 +557,8 @@ export default function Home() {
                   Green miles, flight deck tiers, and airport pooling community perks.
                 </p>
               </div>
-              <Badge variant="glow" className="font-mono text-xs">
-                {demoMode ? "Demo Mode Active" : "Production"}
+              <Badge variant="glow" className="font-mono text-xs" data-testid="demo-data-label">
+                {demoMode ? "Demo data" : "Production"}
               </Badge>
             </div>
 

@@ -139,4 +139,25 @@ test.describe("UI Quality, Accessibility (WCAG AA) & Screenshots", () => {
     });
     await page.screenshot({ path: "docs/screenshots/marshal-light-1440.png" });
   });
+
+  // 7. Gamification in Demo Mode (Port 3000): displays "Demo data", score gauge, badges, quests
+  test("Gamification Layer in Demo Mode shows Demo data badge, Flight Score, and badges", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.locator('button:has-text("Rewards"):visible').click();
+    await expect(page.locator('[data-testid="demo-data-label"]')).toContainText("Demo data");
+    await expect(page.getByRole("heading", { name: /Flight Score Composition/i })).toBeVisible();
+    await expect(page.locator("text=840")).toBeVisible();
+    await expect(page.locator("text=First Landing")).toBeVisible();
+  });
+
+  // 8. Gamification in Production Mode (Port 3001): displays "Coming Soon" with zero mock numbers
+  test("Gamification Layer in Production Mode hides mock numbers and displays Coming Soon", async ({ page }) => {
+    await page.goto("http://localhost:3001/");
+    await page.waitForLoadState("networkidle");
+    await page.locator('button:has-text("Rewards"):visible').click();
+    await expect(page.getByRole("heading", { name: "FlightDeck Rewards Coming Soon" })).toBeVisible();
+    await expect(page.locator("text=840")).not.toBeVisible();
+    await expect(page.locator("text=First Landing")).not.toBeVisible();
+  });
 });

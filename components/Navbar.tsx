@@ -11,6 +11,8 @@ interface NavbarProps {
   currentUser?: { name: string; phone: string; role?: string } | null;
   currentLanguage?: Language;
   onLanguageChange?: (lang: Language) => void;
+  activeTab?: "ride" | "rewards" | "trips" | "profile";
+  onTabChange?: (tab: "ride" | "rewards" | "trips" | "profile") => void;
 }
 
 export default function Navbar({
@@ -18,6 +20,8 @@ export default function Navbar({
   currentUser,
   currentLanguage = "en",
   onLanguageChange,
+  activeTab = "ride",
+  onTabChange,
 }: NavbarProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -56,6 +60,57 @@ export default function Navbar({
             </p>
           </div>
         </Link>
+
+        {/* Desktop Navigation Tabs */}
+        {onTabChange && (
+          <nav className="hidden sm:flex items-center gap-1 bg-[var(--surface-2)] p-1 rounded-xl border border-[var(--surface-border)]">
+            <button
+              type="button"
+              onClick={() => onTabChange("ride")}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === "ride"
+                  ? "bg-[var(--primary)] text-[var(--primary-text)] shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              Ride
+            </button>
+            <button
+              type="button"
+              data-testid="desktop-nav-rewards"
+              onClick={() => onTabChange("rewards")}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === "rewards"
+                  ? "bg-[var(--primary)] text-[var(--primary-text)] shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              Rewards
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("trips")}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === "trips"
+                  ? "bg-[var(--primary)] text-[var(--primary-text)] shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              Trips
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("profile")}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === "profile"
+                  ? "bg-[var(--primary)] text-[var(--primary-text)] shadow-xs"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              Profile
+            </button>
+          </nav>
+        )}
 
         {/* Action Controls: Calm Safety Shield, Language, Theme, Portals */}
         <div className="flex items-center gap-2">
