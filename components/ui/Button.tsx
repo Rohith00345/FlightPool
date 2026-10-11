@@ -81,3 +81,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 Button.displayName = "Button";
+
+export const IconButton = React.forwardRef<HTMLButtonElement, Omit<ButtonProps, "size">>(
+  ({ className = "", children, ...props }, ref) => {
+    return (
+      <Button ref={ref} size="icon" className={`p-2.5 ${className}`} {...props}>
+        {children}
+      </Button>
+    );
+  }
+);
+IconButton.displayName = "IconButton";

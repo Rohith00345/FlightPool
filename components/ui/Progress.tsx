@@ -7,12 +7,14 @@ export interface ProgressProps {
   value: number; // 0 - 100
   color?: "primary" | "accent" | "rewards" | "success";
   className?: string;
+  "aria-label"?: string;
 }
 
 export function Progress({
   value,
   color = "primary",
   className = "",
+  "aria-label": ariaLabel = "Progress indicator",
 }: ProgressProps) {
   const colorStyles = {
     primary: "bg-[var(--primary)]",
@@ -26,6 +28,7 @@ export function Progress({
   return (
     <ProgressPrimitive.Root
       value={clamped}
+      aria-label={ariaLabel}
       className={`relative h-2 w-full overflow-hidden rounded-full bg-[var(--surface-border)] ${className}`}
     >
       <ProgressPrimitive.Indicator

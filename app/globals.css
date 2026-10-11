@@ -1,59 +1,9 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+@import "../styles/tokens.css";
 
-/* Design System Tokens: Night Runway (Dark Default), Daylight Terminal (Light), AMOLED */
-:root {
-  --bg: #070a12;
-  --surface: #0e1424;
-  --surface-2: #141c30;
-  --surface-border: #1e293b;
-  --text: #eaf0ff;
-  --text-muted: #8a94b2;
-  --primary: #ffb020;
-  --primary-hover: #e69d15;
-  --primary-text: #070a12;
-  --accent: #2de2c4;
-  --accent-text: #070a12;
-  --rewards: #7c6cff;
-  --success: #3ddc97;
-  --danger: #ff5c6c;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-}
+/* Design System: Night Runway, Daylight Terminal, AMOLED */
 
-.light, [data-theme="light"] {
-  --bg: #f5f7fb;
-  --surface: #ffffff;
-  --surface-2: #eef2f8;
-  --surface-border: #e2e8f0;
-  --text: #0b1020;
-  --text-muted: #54607b;
-  --primary: #d98200;
-  --primary-hover: #b86e00;
-  --primary-text: #ffffff;
-  --accent: #00a88e;
-  --accent-text: #ffffff;
-  --rewards: #6a57f5;
-  --success: #199464;
-  --danger: #e53e4f;
-}
-
-.amoled, [data-theme="amoled"] {
-  --bg: #000000;
-  --surface: #050505;
-  --surface-2: #0a0a0a;
-  --surface-border: #181818;
-  --text: #ffffff;
-  --text-muted: #737373;
-  --primary: #ffb020;
-  --primary-hover: #e69d15;
-  --primary-text: #000000;
-  --accent: #2de2c4;
-  --accent-text: #000000;
-  --rewards: #7c6cff;
-  --success: #3ddc97;
-  --danger: #ff5c6c;
-}
 
 body {
   background-color: var(--bg);

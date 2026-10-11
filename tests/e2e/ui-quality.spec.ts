@@ -24,6 +24,18 @@ test.describe("UI Quality, Accessibility (WCAG AA) & Screenshots", () => {
     expect(accessibilityScanResults.violations).toEqual([]);
   });
 
+  // 1b. Accessibility Pass on Design Gallery Screen
+  test("Design Gallery Screen WCAG AA Accessibility with Axe", async ({ page }) => {
+    await page.goto("/design");
+    await page.waitForLoadState("networkidle");
+
+    const accessibilityScanResults = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+
+    expect(accessibilityScanResults.violations).toEqual([]);
+  });
+
   // 2. Capture Home Screen Screenshots: 390x844 (Dark & Light) and 1440x900 (Dark & Light)
   test("Capture Home Screen screenshots (390x844 and 1440x900, dark and light)", async ({ page }) => {
     // Mobile Dark (390x844)
