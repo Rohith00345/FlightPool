@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "node -e \"if (process.env.VERCEL_ENV === 'production' && process.env.ALLOW_AUTO_MIGRATE === 'true') { require('child_process').execSync('prisma migrate deploy', { stdio: 'inherit' }); }\" && npm run build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run tests/ --exclude \"tests/e2e/**\"",

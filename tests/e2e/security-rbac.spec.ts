@@ -832,4 +832,52 @@ test.describe("Security, RBAC, Rate Limiting & DPDP Compliance", () => {
       await prisma.fareQuote.delete({ where: { id: testQuote.id } }).catch(() => {});
     }
   });
+
+  test("27. Health & Database Contract Monitoring: Public DB ping & Admin contract check", async ({ request }) => {
+    // 1. Public DB ping: GET /api/health
+    const healthRes = await request.get("/api/health");
+    expect(healthRes.status()).toBe(200);
+    const healthJson = await healthRes.json();
+    expect(healthJson.status).toBe("ok");
+    expect(healthJson.database).toBe("connected");
+
+    // 2. Anonymous access to GET /api/admin/health is rejected with 401
+    const anonAdminHealth = await request.get("/api/admin/health");
+    expect(anonAdminHealth.status()).toBe(401);
+
+    // 3. Rider access to GET /api/admin/health is rejected with 403
+    const riderLogin = await request.post("/api/auth/otp", {
+      data: {
+        identifier: "+919811440099",
+        otp: "123456",
+        name: "Health Test Rider",
+        role: "RIDER",
+      },
+    });
+    const { token: riderToken } = await riderLogin.json();
+    const riderAdminHealth = await request.get("/api/admin/health", {
+      headers: { Authorization: `Bearer ${riderToken}` },
+    });
+    expect(riderAdminHealth.status()).toBe(403);
+
+    // 4. Admin access to GET /api/admin/health returns 200 with full contract verification
+    const adminLogin = await request.post("/api/auth/otp", {
+      data: {
+        identifier: "+919999999999",
+        otp: "123456",
+        name: "Airport Admin",
+        role: "ADMIN",
+      },
+    });
+    const { token: adminToken } = await adminLogin.json();
+    const adminHealthRes = await request.get("/api/admin/health", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(adminHealthRes.status()).toBe(200);
+    const adminHealthJson = await adminHealthRes.json();
+    expect(adminHealthJson.status).toBe("ok");
+    expect(adminHealthJson.contract).toBe("valid");
+    expect(adminHealthJson.modelsChecked).toBeGreaterThan(0);
+    expect(adminHealthJson.totalColumnsChecked).toBeGreaterThan(0);
+  });
 });
