@@ -41,7 +41,18 @@ body {
 .amoled .leaflet-tile-pane,
 [data-theme="dark"] .leaflet-tile-pane,
 [data-theme="amoled"] .leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+  filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(88%) saturate(70%);
+}
+
+.custom-zone-tooltip {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--surface-border) !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  padding: 2px 6px !important;
 }
 
 /* Glassmorphism surfaces */

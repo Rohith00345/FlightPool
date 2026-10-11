@@ -104,8 +104,10 @@ export default function MapPicker({
         });
 
       marker.bindTooltip(`<b>${zone.name}</b>`, {
-        permanent: isSelected,
+        permanent: true,
         direction: "top",
+        offset: [0, -pinSize / 2 - 2],
+        className: "custom-zone-tooltip",
       });
 
       if (isSelected) {

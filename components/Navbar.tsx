@@ -52,7 +52,7 @@ export default function Navbar({
               </span>
             </div>
             <p className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5">
-              Night Runway • T1 / T2
+              Mumbai Airport Cab Sharing • T1 / T2
             </p>
           </div>
         </Link>

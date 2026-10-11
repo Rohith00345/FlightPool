@@ -66,9 +66,9 @@ export function Stepper({
                 )}
               </div>
               <span
-                className={`mt-1 text-[10px] sm:text-xs font-semibold whitespace-nowrap hidden sm:block ${
+                className={`mt-1 text-sm font-semibold whitespace-nowrap hidden sm:block ${
                   isCurrent
-                    ? "text-[var(--primary)]"
+                    ? "text-[var(--primary)] font-bold"
                     : isCompleted
                     ? "text-[var(--text)]"
                     : "text-[var(--text-muted)]"

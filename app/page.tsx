@@ -37,6 +37,7 @@ import {
   Sliders,
   User,
   History,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -1322,6 +1323,11 @@ export default function Home() {
                     <div className="grid grid-cols-3 gap-2">
                       {Object.values(MUMBAI_ZONES).map((z) => {
                         const isSelected = z.id === selectedZone;
+                        const baseKm = z.approxDistanceKmFromT2;
+                        const solo = Math.round(120 + 18 * baseKm * 1.25);
+                        const discount = 0.45 + (waitSaveRatio / 100) * 0.10;
+                        const zonePoolFare = Math.round(solo * (1 - discount));
+                        const estMins = Math.round(15 + baseKm * 1.6);
                         return (
                           <button
                             key={z.id}
@@ -1334,7 +1340,8 @@ export default function Home() {
                             }`}
                           >
                             <p className="text-xs font-bold truncate">{z.name}</p>
-                            <p className="text-[10px] text-[var(--muted)]">{z.approxDistanceKmFromT2} km</p>
+                            <p className="text-[11px] font-mono font-extrabold text-[var(--accent)] mt-0.5">₹{zonePoolFare}</p>
+                            <p className="text-[10px] text-[var(--muted)]">{z.approxDistanceKmFromT2} km • ~{estMins}m</p>
                           </button>
                         );
                       })}
@@ -1380,9 +1387,13 @@ export default function Home() {
                         step={5}
                       />
 
-                      <div className="flex justify-between text-[11px] text-[var(--muted)] pt-1">
-                        <span>Max Wait: {estimates?.maxWaitMins}m</span>
-                        <span>Share: ₹{estimates?.estimatedPoolFare}</span>
+                      <div className="flex justify-between text-[11px] pt-1">
+                        <span className="text-[var(--muted)] font-medium">
+                          Leave sooner <span className="text-[var(--foreground)] font-mono font-bold">(~{estimates?.maxWaitMins}m)</span>
+                        </span>
+                        <span className="text-[var(--muted)] font-medium text-right">
+                          Save more <span className="text-emerald-400 font-mono font-bold">(₹{estimates?.estimatedPoolFare})</span>
+                        </span>
                       </div>
                     </div>
 
@@ -1429,7 +1440,7 @@ export default function Home() {
                             </span>
                           </div>
                           <p className="text-[11px] text-emerald-400 mt-0.5">
-                            🌱 -{estimates.co2Kg} kg CO₂ saved
+                            🌱 {estimates.co2Kg} kg CO₂ saved
                           </p>
                         </div>
 
@@ -1455,6 +1466,20 @@ export default function Home() {
                       <span>{loadingAction ? "Sending Signal..." : "I'VE LANDED & READY"}</span>
                       <ArrowRight className="w-4 h-4" />
                     </Button>
+
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled
+                        className="w-full py-3 text-xs opacity-60 cursor-not-allowed justify-center border-dashed text-[var(--muted)]"
+                      >
+                        ✈️ I&apos;m still in the air, notify me
+                      </Button>
+                      <p className="text-[10px] text-center text-[var(--muted)] mt-1">
+                        Pre-landing pool matching requires in-flight Wi-Fi telemetry (coming soon)
+                      </p>
+                    </div>
                   </Card>
                 </div>
               )}
@@ -1802,16 +1827,16 @@ export default function Home() {
 
                 <Card className="p-4 border-[var(--border)] bg-[var(--surface)]">
                   <span className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                    Community Savings
+                    Flight Pool Radar
                   </span>
                   <div className="mt-2 flex items-center justify-between">
                     <div>
-                      <p className="font-mono font-bold text-base text-[var(--accent)]">
-                        ₹{estimates?.estimatedSavings || 380} Saved
+                      <p className="font-bold text-base text-[var(--foreground)]">
+                        {selectedFlight ? `3 co-riders from ${selectedFlight.flightNumber}` : "3 co-riders waiting"}
                       </p>
-                      <p className="text-xs text-[var(--muted)]">~{estimates?.savingsPct || 51}% off Solo Fare</p>
+                      <p className="text-xs text-[var(--muted)]">heading to {selectedZone || "Thane"} corridor</p>
                     </div>
-                    <Sparkles className="w-5 h-5 text-[var(--primary)]" />
+                    <Users className="w-5 h-5 text-[var(--accent)]" />
                   </div>
                 </Card>
               </div>
