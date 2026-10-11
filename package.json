@@ -11,6 +11,7 @@
     "test": "vitest run tests/ --exclude \"tests/e2e/**\"",
     "test:load": "tsx scripts/load-test.ts",
     "test:e2e": "playwright test",
+    "test:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "simulate": "tsx scripts/simulate.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
