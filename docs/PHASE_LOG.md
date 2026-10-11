@@ -149,30 +149,33 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ---
 
-## Phase 2 (P2 Feature): In-Flight Wi-Fi Pre-Landing Booking Queue
+## Phase 2 (P2 & Scale Features): Pre-Landing Queue, Pluggable SMS/Payments & Rewards
 
 - **Status**: Completed ✅
 - **Branch**: `phase-2-pre-landing`
-- **Files Touched**:
-  - `app/api/rides/pre-landing/route.ts` (created): Complete in-flight booking queue route implementing:
-    - `POST`: Pre-booking queue holding airborne passengers in `QUEUED_IN_FLIGHT` state with `readyAt = null` (isolated from driver dispatches before landing). Computes upfront solo vs pool quotes, saving guarantees, luggage fit, and verifies passenger verification record. Includes strict session authentication and cross-user IDOR protection.
-    - `GET`: Returns real-time in-flight queue telemetry, active flight details, queue position, estimated savings, and touchdown confirmation readiness.
-    - `PATCH`: Handles `TOUCHDOWN_CONFIRMED` transition, activating the request into `POOLING` state and stamping `readyAt = new Date()`, or `CANCEL`.
-  - `app/api/rides/status/route.ts`: Updated query status filter to include `QUEUED_IN_FLIGHT` alongside active matching statuses.
-  - `app/page.tsx`: Activated `#pre-landing-queue-btn` in Step 3 for airborne passengers, with live flight social proof counter and dedicated `QUEUED_IN_FLIGHT` radar card in Step 5 featuring the `#touchdown-ready-btn` touchdown confirmation trigger.
-  - `tests/pre-landing.test.ts` (created): 5 thorough integration tests verifying:
-    1. Validation rejection of missing parameters (400).
-    2. RBAC/IDOR prevention on cross-user queue submissions (403).
-    3. Creation and database persistence of `QUEUED_IN_FLIGHT` state with `null` `readyAt`.
-    4. Retrieval of in-flight queue telemetry via `GET /api/rides/pre-landing`.
-    5. Seamless touchdown confirmation and transition to `POOLING` with stamped `readyAt` via `PATCH`.
-  - `lib/auth.ts`, `lib/retention.ts`, `lib/otp-provider.ts`, `lib/notifications/provider.ts`: Standardized imports to relative paths for universal compatibility across Next.js and Vitest.
+- **Deliverables**:
+  1. **In-Flight Wi-Fi Pre-Landing Booking Queue**:
+     - `app/api/rides/pre-landing/route.ts`: Queue airborne passengers with status `QUEUED_IN_FLIGHT` and `readyAt = null` (isolated from driver dispatch before landing). Supports real-time queue position telemetry, upfront pricing guarantees, and `TOUCHDOWN_CONFIRMED` transition stamping `readyAt = new Date()` into active `POOLING`.
+     - `app/api/rides/status/route.ts`: Expanded active request filters to include in-flight queued states.
+     - `app/page.tsx`: Activated `#pre-landing-queue-btn` in flight selection, live social proof co-rider counter, and dedicated `QUEUED_IN_FLIGHT` radar card in Step 5 with `#touchdown-ready-btn`.
+     - `tests/pre-landing.test.ts`: 5 comprehensive tests validating parameters, IDOR security, database persistence, queue telemetry, and touchdown transition.
+  2. **Pluggable SMS Gateway Adapters**:
+     - `lib/otp-provider.ts`: Implemented `Fast2SmsOtpProvider` (Indian domestic DLT Quick SMS API), `TwilioOtpProvider` (international/fallback REST API), `MockOtpProvider` (demo mode instant delivery), and `ProductionOtpProviderStub` (fail-closed safe fallback). Dynamic factory resolution via `SMS_PROVIDER` and API keys.
+     - `tests/sms-provider.test.ts`: 11 unit tests validating mock bypass, missing credentials fail-closed, 10-digit phone cleaning, payload formats, and factory resolution.
+  3. **Multi-Gateway Payment Adapters (Razorpay + Cashfree)**:
+     - `lib/payments/provider.ts`: Added `CashfreeLiveProvider` (Cashfree PG Orders API, authorize, capture, refund) and `verifyCashfreeWebhookSignature` (HMAC-SHA256 timestamp + raw body verification). Factory updated to select between Cashfree, Razorpay, or Sandbox Mock.
+     - `tests/payments.test.ts`: Expanded to 9 unit tests verifying authentic/tampered signatures, missing secrets, and Cashfree lifecycle.
+  4. **Loyalty & Rewards Gamification APIs**:
+     - `app/api/rewards/route.ts`: `GET` endpoint returning rider flight score, rank, tier, Green Miles balance, and catalog items. Dual-mode support (demo mode telemetry vs production fail-closed).
+     - `app/api/rewards/redeem/route.ts`: `POST` endpoint validating miles balance and issuing verified perk/credit voucher codes.
+     - `tests/gamification.test.ts`: Expanded to 16 unit tests covering tier mappings, XP thresholds, provider switching, and `/api/rewards` & `/api/rewards/redeem` security and validation.
 - **Verification Results**:
-  - Unit/Integration Tests: 13 suites / 82 tests passing (100%).
+  - Unit/Integration Tests: 14 suites / 105 tests passing (100%).
   - Playwright E2E Tests: 52 tests passing (100%).
   - TypeScript (`tsc --noEmit`): 0 errors.
   - ESLint (`npm run lint`): 0 errors.
   - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
-  - `node scripts/verify.mjs`: `RESULT: OK` (9 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+
 
 

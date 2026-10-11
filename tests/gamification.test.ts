@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { NextRequest } from "next/server";
+import { signSessionToken } from "../lib/auth";
 import {
   getScoreTier,
   getRankForXp,
@@ -101,4 +103,124 @@ describe("Phase UI-3: Gamification System & Provider", () => {
       expect(demoState.enabled).toBe(true);
     });
   });
+
+  describe("Rewards API Endpoints (/api/rewards & /api/rewards/redeem)", () => {
+    // Dynamic import to prevent hoisting issues
+    const validToken = signSessionToken({
+      userId: "user_rewards_tester_123",
+      role: "RIDER",
+      name: "Pilot Rider",
+      phone: "+919988776655",
+    });
+
+    it("GET /api/rewards rejects unauthenticated requests with 401", async () => {
+      const { GET } = await import("../app/api/rewards/route");
+      const req = new NextRequest("http://localhost:3000/api/rewards");
+      const res = await GET(req);
+      expect(res.status).toBe(401);
+    });
+
+    it("GET /api/rewards returns gamification state for authenticated rider", async () => {
+      const { GET } = await import("../app/api/rewards/route");
+      const req = new NextRequest("http://localhost:3000/api/rewards", {
+        headers: { Authorization: `Bearer ${validToken}` },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.userId).toBe("user_rewards_tester_123");
+      expect(json.gamification).toBeDefined();
+    });
+
+    it("POST /api/rewards/redeem rejects unauthenticated requests with 401", async () => {
+      const { POST } = await import("../app/api/rewards/redeem/route");
+      const req = new NextRequest("http://localhost:3000/api/rewards/redeem", {
+        method: "POST",
+        body: JSON.stringify({ rewardId: "rw_100" }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(401);
+    });
+
+    it("POST /api/rewards/redeem rejects missing rewardId with 400", async () => {
+      const { POST } = await import("../app/api/rewards/redeem/route");
+      const req = new NextRequest("http://localhost:3000/api/rewards/redeem", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${validToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /api/rewards/redeem rejects non-existent rewardId with 404 in demo mode", async () => {
+      const originalDemo = process.env.DEMO_MODE;
+      try {
+        process.env.DEMO_MODE = "true";
+        const { POST } = await import("../app/api/rewards/redeem/route");
+        const req = new NextRequest("http://localhost:3000/api/rewards/redeem", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${validToken}`,
+          },
+          body: JSON.stringify({ rewardId: "rw_invalid_nonexistent" }),
+        });
+        const res = await POST(req);
+        expect(res.status).toBe(404);
+      } finally {
+        process.env.DEMO_MODE = originalDemo;
+      }
+    });
+
+    it("POST /api/rewards/redeem successfully issues voucher code in demo mode", async () => {
+      const originalDemo = process.env.DEMO_MODE;
+      try {
+        process.env.DEMO_MODE = "true";
+        const { POST } = await import("../app/api/rewards/redeem/route");
+        const req = new NextRequest("http://localhost:3000/api/rewards/redeem", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${validToken}`,
+          },
+          body: JSON.stringify({ rewardId: "rw_100" }),
+        });
+        const res = await POST(req);
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.success).toBe(true);
+        expect(json.rewardId).toBe("rw_100");
+        expect(json.voucherCode).toContain("FP-CREDIT-");
+        expect(json.remainingMilesBalance).toBeDefined();
+      } finally {
+        process.env.DEMO_MODE = originalDemo;
+      }
+    });
+
+    it("POST /api/rewards/redeem fails closed with 503 when production mode is active", async () => {
+      const originalDemo = process.env.DEMO_MODE;
+      try {
+        process.env.DEMO_MODE = "false";
+        const { POST } = await import("../app/api/rewards/redeem/route");
+        const req = new NextRequest("http://localhost:3000/api/rewards/redeem", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${validToken}`,
+          },
+          body: JSON.stringify({ rewardId: "rw_100" }),
+        });
+        const res = await POST(req);
+        expect(res.status).toBe(503);
+      } finally {
+        process.env.DEMO_MODE = originalDemo;
+      }
+    });
+  });
 });
+
