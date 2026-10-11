@@ -176,6 +176,27 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - ESLint (`npm run lint`): 0 errors.
   - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
   - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+---
 
+## Phase 2.5 (Scale Features): Promo Coupon Engine, Referral Credits & Demand Forecast Radar
 
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Promo Code & Discount Engine**:
+     - `lib/pricing/promo.ts`: Implemented `validatePromoCode` evaluating active campaigns (`BOMWELCOME`, `FLYPOOL50`, `GREENMUMBAI`, `NIGHTSAFE`, `THANEEXPRESS`). Enforces minimum fares, first-ride restrictions, allowed corridors, expiration timestamps, discount caps, and strict integer paise calculations (`rupeesToPaise` / `paiseToRupees`).
+     - `app/api/promos/validate/route.ts`: `POST` endpoint validating promo codes for authenticated riders against quoted fares and prior ride history.
+     - `app/api/user/referral/route.ts`: `GET` endpoint generating deterministic referral codes (`generateUserReferralCode`) with shareable links and tracking earned credits.
+     - `tests/promo.test.ts`: 13 comprehensive unit and API tests validating discount caps, minimum fares, first-ride enforcement, corridor constraints, 401/400/422 status handling, and referral codes.
+  2. **Predictive Corridor Demand Forecast & Peak Wave Radar**:
+     - `lib/analytics/demand.ts`: Implemented `computeCorridorDemandForecast` analyzing incoming flight arrivals across T1/T2, expected passenger volumes, and historical corridor split (Thane 28%, Powai 22%, Bandra 18%, Andheri 14%, Navi Mumbai 12%, Mulund 6%). Computes hourly wave groupings, active driver allocation, supply deficits, and recommended driver positioning.
+     - `app/api/admin/demand-forecast/route.ts`: `GET` endpoint protected strictly by `ADMIN` role RBAC.
+     - `tests/demand-forecast.test.ts`: 4 tests validating predictive demand wave calculation, corridor breakdown, deficit metrics, and RBAC rejection (401 unauthenticated, 403 non-admin, 200 admin).
+- **Verification Results**:
+  - Unit/Integration Tests: 16 suites / 122 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
 
