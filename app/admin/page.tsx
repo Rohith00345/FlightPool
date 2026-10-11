@@ -361,7 +361,7 @@ export default function AdminPage() {
           <Card className="p-4 border-[var(--border)] bg-[var(--surface)] flex flex-col justify-between">
             <div className="flex items-center gap-2 text-[var(--muted)] text-xs mb-1">
               <span className="font-bold text-[var(--primary)] font-mono">₹</span>
-              <span className="truncate">Captured revenue</span>
+              <span className="truncate">Captured revenue (completed trips)</span>
             </div>
             <p className="text-2xl font-black font-mono text-[var(--primary)]">
               ₹{metrics.capturedRevenueCompletedTrips ?? metrics.platformRevenue}

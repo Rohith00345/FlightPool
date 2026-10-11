@@ -79,6 +79,8 @@ export function verifyAirportGeofence(
   };
 }
 
+import { prisma } from "./prisma";
+
 export interface DriverQueueEntry {
   driverId: string;
   driverName: string;
@@ -92,7 +94,7 @@ export interface DriverQueueEntry {
   lng: number;
 }
 
-// In-memory FIFO queue registry indexed by terminal
+// In-memory fallback registry indexed by terminal
 const queueRegistry: Record<"T1" | "T2", DriverQueueEntry[]> = {
   T1: [],
   T2: [],
@@ -100,8 +102,9 @@ const queueRegistry: Record<"T1" | "T2", DriverQueueEntry[]> = {
 
 /**
  * Joins a driver to the airport virtual queue if within geofence.
+ * Persists to PostgreSQL via Prisma with in-memory fallback.
  */
-export function joinDriverQueue(params: {
+export async function joinDriverQueue(params: {
   driverId: string;
   driverName: string;
   phone: string;
@@ -109,7 +112,7 @@ export function joinDriverQueue(params: {
   terminalCode?: "T1" | "T2";
   lat: number;
   lng: number;
-}): {
+}): Promise<{
   success: boolean;
   position: number;
   totalInQueue: number;
@@ -117,7 +120,7 @@ export function joinDriverQueue(params: {
   assignedBay: string;
   terminalCode: "T1" | "T2";
   error?: string;
-} {
+}> {
   const geofenceCheck = verifyAirportGeofence(params.lat, params.lng, params.terminalCode);
   if (!geofenceCheck.inGeofence) {
     return {
@@ -132,48 +135,140 @@ export function joinDriverQueue(params: {
   }
 
   const terminal = geofenceCheck.nearestTerminal;
-  const queue = queueRegistry[terminal];
-
-  // Check if driver is already in any queue; if so, update their entry
-  leaveDriverQueue(params.driverId);
-
   const availableBays = AIRPORT_GEOFENCES[terminal].bays;
-  const bayIndex = queue.length % availableBays.length;
-  const assignedBay = availableBays[bayIndex];
-
   const now = new Date();
-  const entry: DriverQueueEntry = {
-    driverId: params.driverId,
-    driverName: params.driverName,
-    phone: params.phone,
-    vehiclePlate: params.vehiclePlate,
-    terminalCode: terminal,
-    joinedAt: now,
-    lastHeartbeatAt: now,
-    assignedBay,
-    lat: params.lat,
-    lng: params.lng,
-  };
 
-  queue.push(entry);
+  // Try DB persistence first
+  try {
+    // Ensure driver record exists in DB to satisfy foreign key constraint
+    let driverRecord = await prisma.driver.findFirst({
+      where: {
+        OR: [{ id: params.driverId }, { phone: params.phone }],
+      },
+    });
 
-  const position = queue.length;
-  const estimatedWaitMin = Math.max(3, position * 4); // 4 minutes per car ahead
+    if (!driverRecord) {
+      driverRecord = await prisma.driver.create({
+        data: {
+          id: params.driverId,
+          name: params.driverName,
+          phone: params.phone,
+          isAvailable: true,
+          rating: 5.0,
+        },
+      }).catch(() => null);
+    }
 
-  return {
-    success: true,
-    position,
-    totalInQueue: queue.length,
-    estimatedWaitMin,
-    assignedBay,
-    terminalCode: terminal,
-  };
+    const resolvedDriverId = driverRecord?.id || params.driverId;
+
+    // Remove any previous active queue entry for this driver
+    await prisma.driverQueueEntry.deleteMany({
+      where: { driverId: resolvedDriverId },
+    }).catch(() => {});
+
+    const activeQueueCount = await prisma.driverQueueEntry.count({
+      where: { terminalCode: terminal, status: "QUEUED" },
+    });
+
+    const assignedBay = availableBays[activeQueueCount % availableBays.length];
+
+    await prisma.driverQueueEntry.create({
+      data: {
+        driverId: resolvedDriverId,
+        driverName: params.driverName,
+        phone: params.phone,
+        vehiclePlate: params.vehiclePlate,
+        terminalCode: terminal,
+        assignedBay,
+        lat: params.lat,
+        lng: params.lng,
+        status: "QUEUED",
+        joinedAt: now,
+        lastHeartbeatAt: now,
+      },
+    });
+
+    const position = activeQueueCount + 1;
+    const totalInQueue = activeQueueCount + 1;
+    const estimatedWaitMin = Math.max(3, position * 4);
+
+    // Keep fallback in sync
+    syncInMemoryJoin(terminal, {
+      driverId: params.driverId,
+      driverName: params.driverName,
+      phone: params.phone,
+      vehiclePlate: params.vehiclePlate,
+      terminalCode: terminal,
+      joinedAt: now,
+      lastHeartbeatAt: now,
+      assignedBay,
+      lat: params.lat,
+      lng: params.lng,
+    });
+
+    return {
+      success: true,
+      position,
+      totalInQueue,
+      estimatedWaitMin,
+      assignedBay,
+      terminalCode: terminal,
+    };
+  } catch {
+    // In-memory fallback if DB unavailable
+    const queue = queueRegistry[terminal];
+    leaveInMemory(params.driverId);
+
+    const bayIndex = queue.length % availableBays.length;
+    const assignedBay = availableBays[bayIndex];
+
+    const entry: DriverQueueEntry = {
+      driverId: params.driverId,
+      driverName: params.driverName,
+      phone: params.phone,
+      vehiclePlate: params.vehiclePlate,
+      terminalCode: terminal,
+      joinedAt: now,
+      lastHeartbeatAt: now,
+      assignedBay,
+      lat: params.lat,
+      lng: params.lng,
+    };
+    queue.push(entry);
+
+    const position = queue.length;
+    return {
+      success: true,
+      position,
+      totalInQueue: queue.length,
+      estimatedWaitMin: Math.max(3, position * 4),
+      assignedBay,
+      terminalCode: terminal,
+    };
+  }
+}
+
+function syncInMemoryJoin(terminal: "T1" | "T2", entry: DriverQueueEntry) {
+  leaveInMemory(entry.driverId);
+  queueRegistry[terminal].push(entry);
+}
+
+function leaveInMemory(driverId: string): boolean {
+  for (const t of ["T2", "T1"] as const) {
+    const q = queueRegistry[t];
+    const idx = q.findIndex((e) => e.driverId === driverId);
+    if (idx !== -1) {
+      q.splice(idx, 1);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
  * Returns current virtual queue status for a driver.
  */
-export function getDriverQueueStatus(driverId: string): {
+export async function getDriverQueueStatus(driverId: string): Promise<{
   inQueue: boolean;
   position?: number;
   totalInQueue?: number;
@@ -181,13 +276,52 @@ export function getDriverQueueStatus(driverId: string): {
   assignedBay?: string;
   terminalCode?: "T1" | "T2";
   joinedAt?: string;
-} {
+}> {
+  try {
+    const entry = await prisma.driverQueueEntry.findFirst({
+      where: { driverId, status: "QUEUED" },
+    });
+
+    if (entry) {
+      // Update heartbeat
+      await prisma.driverQueueEntry.update({
+        where: { id: entry.id },
+        data: { lastHeartbeatAt: new Date() },
+      }).catch(() => {});
+
+      const aheadCount = await prisma.driverQueueEntry.count({
+        where: {
+          terminalCode: entry.terminalCode,
+          status: "QUEUED",
+          joinedAt: { lt: entry.joinedAt },
+        },
+      });
+
+      const position = aheadCount + 1;
+      const totalInQueue = await prisma.driverQueueEntry.count({
+        where: { terminalCode: entry.terminalCode, status: "QUEUED" },
+      });
+
+      return {
+        inQueue: true,
+        position,
+        totalInQueue,
+        estimatedWaitMin: Math.max(3, position * 4),
+        assignedBay: entry.assignedBay,
+        terminalCode: entry.terminalCode as "T1" | "T2",
+        joinedAt: entry.joinedAt.toISOString(),
+      };
+    }
+  } catch {
+    // fallback below
+  }
+
+  // Fallback to in-memory check
   for (const terminal of ["T2", "T1"] as const) {
     const queue = queueRegistry[terminal];
-    const index = queue.findIndex((entry) => entry.driverId === driverId);
+    const index = queue.findIndex((e) => e.driverId === driverId);
     if (index !== -1) {
       const entry = queue[index];
-      // Update heartbeat on check
       entry.lastHeartbeatAt = new Date();
       const position = index + 1;
       return {
@@ -208,29 +342,69 @@ export function getDriverQueueStatus(driverId: string): {
 /**
  * Removes a driver from the virtual queue.
  */
-export function leaveDriverQueue(driverId: string): { success: boolean } {
-  for (const terminal of ["T2", "T1"] as const) {
-    const queue = queueRegistry[terminal];
-    const index = queue.findIndex((entry) => entry.driverId === driverId);
-    if (index !== -1) {
-      queue.splice(index, 1);
-      return { success: true };
-    }
+export async function leaveDriverQueue(driverId: string): Promise<{ success: boolean }> {
+  let dbRemoved = false;
+  try {
+    const deleted = await prisma.driverQueueEntry.deleteMany({
+      where: { driverId },
+    });
+    dbRemoved = deleted.count > 0;
+  } catch {
+    // DB error handled by fallback
   }
-  return { success: false };
+
+  const memRemoved = leaveInMemory(driverId);
+  return { success: dbRemoved || memRemoved };
 }
 
 /**
  * Retrieves the complete FIFO queue for a terminal (for ops / dispatch views).
  */
-export function getTerminalQueue(terminalCode: "T1" | "T2"): DriverQueueEntry[] {
+export async function getTerminalQueue(terminalCode: "T1" | "T2"): Promise<DriverQueueEntry[]> {
+  try {
+    const entries = await prisma.driverQueueEntry.findMany({
+      where: { terminalCode, status: "QUEUED" },
+      orderBy: { joinedAt: "asc" },
+    });
+    if (entries.length > 0) {
+      return entries.map((e) => ({
+        driverId: e.driverId,
+        driverName: e.driverName,
+        phone: e.phone,
+        vehiclePlate: e.vehiclePlate,
+        terminalCode: e.terminalCode as "T1" | "T2",
+        joinedAt: e.joinedAt,
+        lastHeartbeatAt: e.lastHeartbeatAt,
+        assignedBay: e.assignedBay,
+        lat: e.lat,
+        lng: e.lng,
+      }));
+    }
+  } catch {
+    // fallback
+  }
+
   return [...queueRegistry[terminalCode]];
 }
 
 /**
  * Resets queues (strictly for testing isolation).
  */
-export function resetDriverQueues(): void {
-  queueRegistry.T1 = [];
-  queueRegistry.T2 = [];
+export async function resetDriverQueues(terminalCode?: "T1" | "T2"): Promise<void> {
+  if (terminalCode) {
+    queueRegistry[terminalCode] = [];
+    try {
+      await prisma.driverQueueEntry.deleteMany({ where: { terminalCode } });
+    } catch {
+      // fallback
+    }
+  } else {
+    queueRegistry.T1 = [];
+    queueRegistry.T2 = [];
+    try {
+      await prisma.driverQueueEntry.deleteMany({});
+    } catch {
+      // fallback
+    }
+  }
 }

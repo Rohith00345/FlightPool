@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
+import { prisma } from "../../../../lib/prisma";
+import { getSessionFromRequest } from "../../../../lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
     // 1. Delete personal marketing/location consents
     await prisma.consent.deleteMany({ where: { userId: targetUserId } });
 
-    // 2. Delete boarding pass and PNR verifications
+    // 2. Delete emergency contacts (DPDP compliance)
+    await prisma.emergencyContact.deleteMany({ where: { userId: targetUserId } });
+
+    // 3. Delete boarding pass and PNR verifications
     await prisma.passengerVerification.deleteMany({ where: { userId: targetUserId } });
 
     // 3. Anonymize user profile (Financial, payment and ledger records are retained

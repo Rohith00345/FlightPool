@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const queueResult = joinDriverQueue({
+    const queueResult = await joinDriverQueue({
       driverId: driver.id,
       driverName: driver.name,
       phone: driver.phone,
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const status = getDriverQueueStatus(driver.id);
+    const status = await getDriverQueueStatus(driver.id);
 
     return NextResponse.json({
       success: true,
@@ -151,7 +151,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const result = leaveDriverQueue(driver.id);
+    const result = await leaveDriverQueue(driver.id);
 
     return NextResponse.json({
       success: true,

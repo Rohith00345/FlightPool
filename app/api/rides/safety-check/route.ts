@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const audit = auditNightRideSafety({
+    const audit = await auditNightRideSafety({
       userId: session.userId,
       riderName: session.name || "Aviation Passenger",
       originTerminal: tripDetails.originTerminal,

@@ -61,12 +61,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    let appliedMigrations: string[] = [];
+    try {
+      const records = await prisma.$queryRaw<Array<{ migration_name: string }>>`
+        SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL ORDER BY finished_at ASC
+      `;
+      appliedMigrations = records.map((r) => r.migration_name);
+    } catch {
+      // Non-blocking if table is not available
+    }
+
     return NextResponse.json({
       status: "ok",
       database: "connected",
       contract: "valid",
       modelsChecked: models.length,
       totalColumnsChecked,
+      appliedMigrations,
       durationMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     });

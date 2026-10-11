@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { MUMBAI_ZONES, AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes } from "@/lib/geo";
-import { calculateSoloFare, getTimeOfDayMultiplier } from "@/lib/pricing";
-import { getSessionFromRequest } from "@/lib/auth";
+import { prisma } from "../../../../lib/prisma";
+import { MUMBAI_ZONES, AIRPORT_TERMINALS, estimateRoadDistanceKm, estimateDurationMinutes } from "../../../../lib/geo";
+import { calculateSoloFare, getTimeOfDayMultiplier } from "../../../../lib/pricing";
+import { getSessionFromRequest } from "../../../../lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
           luggageCount: luggageCount ?? existing.luggageCount,
           womenOnly: womenOnly ?? existing.womenOnly,
           readyTime,
+          readyAt: readyTime,
           status,
         },
       });
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
           luggageCount: luggageCount ?? 1,
           womenOnly: womenOnly ?? false,
           readyTime,
+          readyAt: readyTime,
           status,
         },
       });

@@ -151,6 +151,7 @@ export default function Home() {
   const [genderInput, setGenderInput] = useState("MALE");
   const [otpInput, setOtpInput] = useState(demoMode ? "123456" : "");
   const [authError, setAuthError] = useState("");
+  const [readyError, setReadyError] = useState("");
   const [showDemoSelector, setShowDemoSelector] = useState(false);
 
   // Flight Selection
@@ -387,6 +388,7 @@ export default function Home() {
   const handleImReady = async () => {
     if (!currentUser || !selectedFlight) return;
     setLoadingAction(true);
+    setReadyError("");
     try {
       const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
       const res = await fetch("/api/rides/request", {
@@ -405,19 +407,24 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        setActiveRequest(data.rideRequest);
-        // Trigger matching engine
-        await fetch("/api/pools/match", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ flightId: selectedFlight.id }),
-        });
-        setStep("RIDE_STATE");
-        await refreshRideStatus();
+      if (!res.ok || !data.success) {
+        setReadyError(data.error || "Failed to submit ride request. Please try again.");
+        return;
       }
+
+      setActiveRequest(data.rideRequest);
+      // Trigger matching engine
+      await fetch("/api/pools/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flightId: selectedFlight.id }),
+      }).catch(console.error);
+
+      setStep("RIDE_STATE");
+      await refreshRideStatus();
     } catch (e) {
       console.error(e);
+      setReadyError("Network error while signaling arrival. Please check connection and retry.");
     } finally {
       setLoadingAction(false);
     }
@@ -1494,7 +1501,23 @@ export default function Home() {
                       </div>
                     )}
 
+                    {readyError && (
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 flex items-center justify-between gap-2">
+                        <span>{readyError}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleImReady}
+                          className="text-[10px] py-1 px-2 h-7 border-rose-500/40 hover:bg-rose-500/20 text-rose-300"
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+
                     <Button
+                      id="request-ride-btn"
+                      data-testid="request-ride-btn"
                       onClick={handleImReady}
                       disabled={loadingAction}
                       className="w-full py-4 text-xs font-bold gap-2"

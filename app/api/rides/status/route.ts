@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSessionFromRequest } from "@/lib/auth";
-import { evaluatePoolWaitCap, deriveJourneyState } from "@/lib/pool-engine";
+import { prisma } from "../../../../lib/prisma";
+import { getSessionFromRequest } from "../../../../lib/auth";
+import { evaluatePoolWaitCap, deriveJourneyState } from "../../../../lib/pool-engine";
 
 export const dynamic = "force-dynamic";
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from "vitest";
 import {
   calculateHaversineDistanceKm,
   verifyAirportGeofence,
@@ -14,8 +14,8 @@ import { NextRequest } from "next/server";
 import { POST, GET, DELETE } from "../app/api/driver/queue/route";
 
 describe("Driver Virtual Queue & Airport Geofence Staging", () => {
-  beforeEach(() => {
-    resetDriverQueues();
+  beforeEach(async () => {
+    await resetDriverQueues("T2");
   });
 
   describe("Unit: Geofencing & Distance Calculations", () => {
@@ -53,8 +53,8 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
   });
 
   describe("Unit: FIFO Queue Mechanics & Staging Bays", () => {
-    it("enforces FIFO queue ordering and computes accurate wait times", () => {
-      const driver1 = joinDriverQueue({
+    it("enforces FIFO queue ordering and computes accurate wait times", async () => {
+      const driver1 = await joinDriverQueue({
         driverId: "drv_1",
         driverName: "Ramesh Sharma",
         phone: "+919876543210",
@@ -69,7 +69,7 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
       expect(driver1.totalInQueue).toBe(1);
       expect(driver1.assignedBay).toBe("P4 Bay A");
 
-      const driver2 = joinDriverQueue({
+      const driver2 = await joinDriverQueue({
         driverId: "drv_2",
         driverName: "Suresh Patil",
         phone: "+919876543211",
@@ -86,20 +86,20 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
       expect(driver2.assignedBay).toBe("P4 Bay B");
 
       // Check status of driver 1
-      const status1 = getDriverQueueStatus("drv_1");
+      const status1 = await getDriverQueueStatus("drv_1");
       expect(status1.inQueue).toBe(true);
       expect(status1.position).toBe(1);
 
       // Driver 1 leaves queue -> Driver 2 advances to position 1
-      leaveDriverQueue("drv_1");
-      const status2After = getDriverQueueStatus("drv_2");
+      await leaveDriverQueue("drv_1");
+      const status2After = await getDriverQueueStatus("drv_2");
       expect(status2After.inQueue).toBe(true);
       expect(status2After.position).toBe(1);
       expect(status2After.totalInQueue).toBe(1);
     });
 
-    it("rejects drivers outside the geofence from entering the queue", () => {
-      const outsideResult = joinDriverQueue({
+    it("rejects drivers outside the geofence from entering the queue", async () => {
+      const outsideResult = await joinDriverQueue({
         driverId: "drv_outside",
         driverName: "Distant Driver",
         phone: "+919876543299",
@@ -119,7 +119,7 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
     const testDriver = {
       id: "drv_queue_test_01",
       name: "Ramesh Sharma",
-      phone: "+919876543210",
+      phone: "+919876549999",
       createdAt: new Date(),
       updatedAt: new Date(),
       isAvailable: true,
@@ -140,7 +140,13 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
     let driverToken: string;
     let riderToken: string;
 
-    beforeAll(() => {
+    beforeAll(async () => {
+      await prisma.driver.upsert({
+        where: { id: testDriver.id },
+        update: { name: testDriver.name, phone: testDriver.phone, isAvailable: true },
+        create: { id: testDriver.id, name: testDriver.name, phone: testDriver.phone, isAvailable: true, rating: 4.9 },
+      }).catch(() => {});
+
       vi.spyOn(prisma.driver, "findFirst").mockResolvedValue(
         testDriver as unknown as Awaited<ReturnType<typeof prisma.driver.findFirst>>
       );
@@ -157,6 +163,11 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
         role: "RIDER",
         phone: "+919988776655",
       });
+    });
+
+    afterAll(async () => {
+      await prisma.driverQueueEntry.deleteMany({ where: { driverId: testDriver.id } }).catch(() => {});
+      await prisma.driver.deleteMany({ where: { id: testDriver.id } }).catch(() => {});
     });
 
     it("rejects unauthenticated requests with 401", async () => {
@@ -221,7 +232,7 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
 
     it("queries queue status for authenticated driver with 200", async () => {
       // First ensure driver is queued
-      joinDriverQueue({
+      await joinDriverQueue({
         driverId: testDriver.id,
         driverName: testDriver.name,
         phone: testDriver.phone,
@@ -257,7 +268,7 @@ describe("Driver Virtual Queue & Airport Geofence Staging", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      const check = getDriverQueueStatus(testDriver.id);
+      const check = await getDriverQueueStatus(testDriver.id);
       expect(check.inQueue).toBe(false);
     });
   });

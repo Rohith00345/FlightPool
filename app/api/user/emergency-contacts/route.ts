@@ -3,6 +3,7 @@ import { getSessionFromRequest } from "../../../../lib/auth";
 import {
   getUserEmergencyContacts,
   addEmergencyContact,
+  updateContactConsent,
   removeEmergencyContact,
   ContactRelationship,
 } from "../../../../lib/safety/emergency-contacts";
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const contacts = getUserEmergencyContacts(session.userId);
+    const contacts = await getUserEmergencyContacts(session.userId);
 
     return NextResponse.json({
       success: true,
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, phone, relationship, autoShareAtNight } = body;
 
-    const result = addEmergencyContact({
+    const result = await addEmergencyContact({
       userId: session.userId,
       name,
       phone,
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json(
         { error: result.error },
-        { status: 400 }
+        { status: result.statusCode || 400 }
       );
     }
 
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
         success: true,
         message: "Emergency contact successfully added",
         contact: result.contact,
+        optInMessage: result.optInMessage,
       },
       { status: 201 }
     );
@@ -84,6 +86,50 @@ export async function POST(req: NextRequest) {
     console.error("Add emergency contact error:", error);
     return NextResponse.json(
       { error: "Internal server error adding emergency contact" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/user/emergency-contacts
+ * Manages consent opt-in or opt-out status for an emergency contact.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized: Active session required" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const { contactId, consentAction } = body;
+
+    if (!contactId || !["CONFIRM", "OPT_OUT"].includes(consentAction)) {
+      return NextResponse.json(
+        { error: "contactId and consentAction ('CONFIRM' or 'OPT_OUT') are required" },
+        { status: 400 }
+      );
+    }
+
+    const result = await updateContactConsent({
+      userId: session.userId,
+      contactId,
+      consentAction,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: consentAction === "CONFIRM" ? "Emergency contact consent confirmed" : "Emergency contact opted out",
+      consentStatus: result.consentStatus,
+    });
+  } catch (error) {
+    console.error("Update emergency contact consent error:", error);
+    return NextResponse.json(
+      { error: "Internal server error updating consent" },
       { status: 500 }
     );
   }
@@ -118,7 +164,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const result = removeEmergencyContact(session.userId, contactId);
+    const result = await removeEmergencyContact(session.userId, contactId);
 
     if (!result.success) {
       return NextResponse.json(

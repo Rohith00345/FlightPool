@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { matchRiderRequests, RiderRequest } from "@/lib/matching";
-import { calculatePoolPricing } from "@/lib/pricing";
-import { getSessionFromRequest } from "@/lib/auth";
+import { prisma } from "../../../../lib/prisma";
+import { matchRiderRequests, RiderRequest } from "../../../../lib/matching";
+import { calculatePoolPricing } from "../../../../lib/pricing";
+import { getSessionFromRequest } from "../../../../lib/auth";
 
 const matchRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 

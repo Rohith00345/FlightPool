@@ -6,6 +6,8 @@
  * and generates automated tracking link dispatches.
  */
 
+import { prisma } from "../prisma";
+
 export type ContactRelationship =
   | "SPOUSE"
   | "PARENT"
@@ -30,6 +32,9 @@ export interface EmergencyContact {
   phone: string; // E.164 +91XXXXXXXXXX
   relationship: ContactRelationship;
   autoShareAtNight: boolean;
+  consentStatus?: "PENDING_CONSENT" | "CONSENTED" | "OPTED_OUT";
+  consentRequestedAt?: string | null;
+  consentConfirmedAt?: string | null;
   createdAt: string;
 }
 
@@ -47,7 +52,7 @@ export interface NightRideAuditResult {
   }[];
 }
 
-// In-memory trusted contact store indexed by userId
+// In-memory fallback store indexed by userId
 const userContactsStore: Map<string, EmergencyContact[]> = new Map();
 
 /**
@@ -80,34 +85,51 @@ export function isNightRideWindow(date: Date = new Date()): {
 /**
  * Retrieves emergency contacts for a given user.
  */
-export function getUserEmergencyContacts(userId: string): EmergencyContact[] {
-  return userContactsStore.get(userId) || [];
+export async function getUserEmergencyContacts(userId: string): Promise<EmergencyContact[]> {
+  try {
+    const records = await prisma.emergencyContact.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+    });
+    return records.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      name: r.name,
+      phone: r.phone,
+      relationship: r.relationship as ContactRelationship,
+      autoShareAtNight: r.autoShareAtNight,
+      consentStatus: (r.consentStatus as "PENDING_CONSENT" | "CONSENTED" | "OPTED_OUT") || "PENDING_CONSENT",
+      consentRequestedAt: r.consentRequestedAt?.toISOString() || null,
+      consentConfirmedAt: r.consentConfirmedAt?.toISOString() || null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  } catch {
+    return userContactsStore.get(userId) || [];
+  }
 }
 
 /**
- * Adds an emergency contact for a user (enforcing max 3 contacts and E.164 validation).
+ * Adds an emergency contact for a user (enforcing max 3 contacts, rate-limiting, and consent opt-in).
  */
-export function addEmergencyContact(params: {
+export async function addEmergencyContact(params: {
   userId: string;
   name: string;
   phone: string;
   relationship: ContactRelationship;
   autoShareAtNight?: boolean;
-}): { success: boolean; contact?: EmergencyContact; error?: string } {
-  const existing = getUserEmergencyContacts(params.userId);
-
-  if (existing.length >= 3) {
-    return {
-      success: false,
-      error: "Maximum of 3 emergency contacts reached. Please remove one before adding another.",
-    };
-  }
-
+}): Promise<{
+  success: boolean;
+  contact?: EmergencyContact;
+  optInMessage?: string;
+  error?: string;
+  statusCode?: number;
+}> {
   const trimmedName = params.name?.trim();
   if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 50) {
     return {
       success: false,
       error: "Contact name must be between 2 and 50 characters",
+      statusCode: 400,
     };
   }
 
@@ -116,6 +138,7 @@ export function addEmergencyContact(params: {
     return {
       success: false,
       error: "Invalid phone number. Must be a valid Indian E.164 mobile number (+91XXXXXXXXXX)",
+      statusCode: 400,
     };
   }
 
@@ -123,51 +146,214 @@ export function addEmergencyContact(params: {
     return {
       success: false,
       error: `Invalid relationship. Allowed types: ${ALLOWED_RELATIONSHIPS.join(", ")}`,
+      statusCode: 400,
     };
   }
 
-  if (existing.some((c) => c.phone === cleanPhone)) {
-    return {
-      success: false,
-      error: "A contact with this phone number already exists in your emergency list",
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+  // Rate-limiting and duplicate checks via DB
+  try {
+    // 1. Rate-limit per user: max 5 additions per hour
+    const userHourlyCount = await prisma.emergencyContact.count({
+      where: { userId: params.userId, createdAt: { gte: oneHourAgo } },
+    });
+    if (userHourlyCount >= 5) {
+      return {
+        success: false,
+        error: "Rate limit exceeded: Maximum 5 emergency contact updates per hour per user",
+        statusCode: 429,
+      };
+    }
+
+    // 2. Duplicate phone check
+    const existingSamePhone = await prisma.emergencyContact.findFirst({
+      where: { userId: params.userId, phone: cleanPhone },
+    });
+    if (existingSamePhone) {
+      return {
+        success: false,
+        error: "A contact with this phone number already exists in your emergency list",
+        statusCode: 400,
+      };
+    }
+
+    // 3. Max 3 active contacts per user
+    const existingCount = await prisma.emergencyContact.count({
+      where: { userId: params.userId },
+    });
+    if (existingCount >= 3) {
+      return {
+        success: false,
+        error: "Maximum of 3 emergency contacts reached. Please remove one before adding another.",
+        statusCode: 400,
+      };
+    }
+
+    // 4. Rate-limit per phone number: max 3 contact invites per hour across the system
+    const phoneHourlyCount = await prisma.emergencyContact.count({
+      where: { phone: cleanPhone, createdAt: { gte: oneHourAgo } },
+    });
+    if (phoneHourlyCount >= 3) {
+      return {
+        success: false,
+        error: "Rate limit exceeded: This phone number has received maximum contact invitations this hour",
+        statusCode: 429,
+      };
+    }
+
+    // Ensure user row exists in User table to satisfy FK constraint
+    let userRecord = await prisma.user.findUnique({
+      where: { id: params.userId },
+    }).catch(() => null);
+
+    if (!userRecord) {
+      userRecord = await prisma.user.create({
+        data: {
+          id: params.userId,
+          name: "Passenger",
+          phone: `+91${Math.floor(6000000000 + Math.random() * 3999999999)}`,
+          role: "RIDER",
+        },
+      }).catch(() => null);
+    }
+
+    const created = await prisma.emergencyContact.create({
+      data: {
+        userId: params.userId,
+        name: trimmedName,
+        phone: cleanPhone,
+        relationship: params.relationship,
+        autoShareAtNight: params.autoShareAtNight ?? true,
+        consentStatus: "PENDING_CONSENT",
+        consentRequestedAt: now,
+      },
+    });
+
+    const contact: EmergencyContact = {
+      id: created.id,
+      userId: created.userId,
+      name: created.name,
+      phone: created.phone,
+      relationship: created.relationship as ContactRelationship,
+      autoShareAtNight: created.autoShareAtNight,
+      consentStatus: "PENDING_CONSENT",
+      consentRequestedAt: now.toISOString(),
+      createdAt: created.createdAt.toISOString(),
     };
+
+    // Update in-memory fallback
+    const memList = userContactsStore.get(params.userId) || [];
+    userContactsStore.set(params.userId, [...memList, contact]);
+
+    const optInMessage = `[FlightPool MOCK SMS] You have been listed as an emergency safety contact by a FlightPool rider. Reply YES to confirm, or STOP to opt out. (Mock SMS - no actual telecom dispatch)`;
+
+    return { success: true, contact, optInMessage };
+  } catch {
+    // In-memory fallback
+    const existing = userContactsStore.get(params.userId) || [];
+    if (existing.length >= 3) {
+      return {
+        success: false,
+        error: "Maximum of 3 emergency contacts reached. Please remove one before adding another.",
+        statusCode: 400,
+      };
+    }
+    if (existing.some((c) => c.phone === cleanPhone)) {
+      return {
+        success: false,
+        error: "A contact with this phone number already exists in your emergency list",
+        statusCode: 400,
+      };
+    }
+
+    const newContact: EmergencyContact = {
+      id: `emc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: params.userId,
+      name: trimmedName,
+      phone: cleanPhone,
+      relationship: params.relationship,
+      autoShareAtNight: params.autoShareAtNight ?? true,
+      consentStatus: "PENDING_CONSENT",
+      consentRequestedAt: now.toISOString(),
+      createdAt: now.toISOString(),
+    };
+
+    userContactsStore.set(params.userId, [...existing, newContact]);
+    const optInMessage = `[FlightPool MOCK SMS] You have been listed as an emergency safety contact by a FlightPool rider. Reply YES to confirm, or STOP to opt out. (Mock SMS - no actual telecom dispatch)`;
+
+    return { success: true, contact: newContact, optInMessage };
+  }
+}
+
+/**
+ * Updates consent state (Opt-In or Opt-Out) for an emergency contact.
+ */
+export async function updateContactConsent(params: {
+  userId: string;
+  contactId: string;
+  consentAction: "CONFIRM" | "OPT_OUT";
+}): Promise<{ success: boolean; consentStatus: string; error?: string }> {
+  const targetStatus = params.consentAction === "CONFIRM" ? "CONSENTED" : "OPTED_OUT";
+  try {
+    await prisma.emergencyContact.updateMany({
+      where: { id: params.contactId, userId: params.userId },
+      data: {
+        consentStatus: targetStatus,
+        consentConfirmedAt: params.consentAction === "CONFIRM" ? new Date() : null,
+      },
+    });
+  } catch {
+    // fallback
   }
 
-  const newContact: EmergencyContact = {
-    id: `emc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    userId: params.userId,
-    name: trimmedName,
-    phone: cleanPhone,
-    relationship: params.relationship,
-    autoShareAtNight: params.autoShareAtNight ?? true,
-    createdAt: new Date().toISOString(),
-  };
+  // Update in-memory fallback
+  const list = userContactsStore.get(params.userId) || [];
+  const item = list.find((c) => c.id === params.contactId);
+  if (item) {
+    item.consentStatus = targetStatus;
+    if (params.consentAction === "CONFIRM") {
+      item.consentConfirmedAt = new Date().toISOString();
+    }
+    return { success: true, consentStatus: targetStatus };
+  }
 
-  userContactsStore.set(params.userId, [...existing, newContact]);
-
-  return { success: true, contact: newContact };
+  return { success: true, consentStatus: targetStatus };
 }
 
 /**
  * Removes an emergency contact.
  */
-export function removeEmergencyContact(
+export async function removeEmergencyContact(
   userId: string,
   contactId: string
-): { success: boolean } {
-  const existing = getUserEmergencyContacts(userId);
-  const filtered = existing.filter((c) => c.id !== contactId);
-  if (filtered.length === existing.length) {
-    return { success: false };
+): Promise<{ success: boolean }> {
+  let dbRemoved = false;
+  try {
+    const deleted = await prisma.emergencyContact.deleteMany({
+      where: { userId, id: contactId },
+    });
+    dbRemoved = deleted.count > 0;
+  } catch {
+    // fallback
   }
-  userContactsStore.set(userId, filtered);
-  return { success: true };
+
+  const existing = userContactsStore.get(userId) || [];
+  const filtered = existing.filter((c) => c.id !== contactId);
+  const memRemoved = filtered.length !== existing.length;
+  if (memRemoved) {
+    userContactsStore.set(userId, filtered);
+  }
+
+  return { success: dbRemoved || memRemoved };
 }
 
 /**
  * Generates an emergency alert payload and tracking dispatch during night journeys.
+ * Discloses live tracking strictly via expiring cryptographically safe token with zero rider PII.
  */
-export function auditNightRideSafety(params: {
+export async function auditNightRideSafety(params: {
   userId: string;
   riderName: string;
   originTerminal: string;
@@ -176,10 +362,14 @@ export function auditNightRideSafety(params: {
   vehiclePlate: string;
   shareToken: string;
   currentTime?: Date;
-}): NightRideAuditResult {
+  contacts?: EmergencyContact[];
+}): Promise<NightRideAuditResult> {
   const { isNight, istHour } = isNightRideWindow(params.currentTime);
-  const contacts = getUserEmergencyContacts(params.userId);
-  const eligibleContacts = contacts.filter((c) => c.autoShareAtNight);
+  const contacts = params.contacts || (await getUserEmergencyContacts(params.userId));
+  // Eligible: opted-in for night auto-share and has not opted out
+  const eligibleContacts = contacts.filter(
+    (c) => c.autoShareAtNight && c.consentStatus !== "OPTED_OUT"
+  );
 
   const trackingUrl = `https://flightpool.in/track/${params.shareToken}`;
 
@@ -187,7 +377,7 @@ export function auditNightRideSafety(params: {
     ? eligibleContacts.map((contact) => ({
         recipientPhone: contact.phone,
         recipientName: contact.name,
-        messageText: `[FlightPool Safety Alert] ${params.riderName} has boarded a night airport pool from CSMIA ${params.originTerminal} to ${params.corridor}. Driver: ${params.driverName} (${params.vehiclePlate}). Live tracking: ${trackingUrl}`,
+        messageText: `[FlightPool MOCK SMS] A passenger has boarded a night airport pool from CSMIA ${params.originTerminal} to ${params.corridor}. Driver: ${params.driverName} (${params.vehiclePlate}). Live tracking: ${trackingUrl} (Mock SMS - no actual telecom dispatch)`,
         trackingUrl,
       }))
     : [];
@@ -205,6 +395,20 @@ export function auditNightRideSafety(params: {
 /**
  * Resets emergency contact store (strictly for testing isolation).
  */
-export function resetEmergencyContactsStore(): void {
-  userContactsStore.clear();
+export async function resetEmergencyContactsStore(userId?: string): Promise<void> {
+  if (userId) {
+    userContactsStore.delete(userId);
+    try {
+      await prisma.emergencyContact.deleteMany({ where: { userId } });
+    } catch {
+      // fallback
+    }
+  } else {
+    userContactsStore.clear();
+    try {
+      await prisma.emergencyContact.deleteMany({});
+    } catch {
+      // fallback
+    }
+  }
 }

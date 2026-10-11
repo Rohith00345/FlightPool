@@ -14,8 +14,11 @@ import { GET as getContacts, POST as postContact, DELETE as deleteContact } from
 import { POST as safetyCheck } from "../app/api/rides/safety-check/route";
 
 describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
-  beforeEach(() => {
-    resetEmergencyContactsStore();
+  beforeEach(async () => {
+    await resetEmergencyContactsStore("usr_safety_test");
+    await resetEmergencyContactsStore("usr_night_rider");
+    await resetEmergencyContactsStore("usr_day_rider");
+    await resetEmergencyContactsStore("usr_api_rider");
   });
 
   describe("Unit: Phone Validation & Input Rules", () => {
@@ -38,8 +41,8 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
   describe("Unit: Contact Store & Invariants", () => {
     const userId = "usr_safety_test";
 
-    it("adds trusted contact successfully", () => {
-      const res = addEmergencyContact({
+    it("adds trusted contact successfully", async () => {
+      const res = await addEmergencyContact({
         userId,
         name: "Pooja Sharma",
         phone: "+919876543210",
@@ -51,17 +54,19 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       expect(res.contact?.name).toBe("Pooja Sharma");
       expect(res.contact?.relationship).toBe("SPOUSE");
       expect(res.contact?.autoShareAtNight).toBe(true);
+      expect(res.contact?.consentStatus).toBe("PENDING_CONSENT");
+      expect(res.optInMessage).toContain("[FlightPool MOCK SMS]");
 
-      const contacts = getUserEmergencyContacts(userId);
+      const contacts = await getUserEmergencyContacts(userId);
       expect(contacts.length).toBe(1);
     });
 
-    it("enforces maximum of 3 emergency contacts per user", () => {
-      addEmergencyContact({ userId, name: "Contact 1", phone: "+919876543211", relationship: "PARENT" });
-      addEmergencyContact({ userId, name: "Contact 2", phone: "+919876543212", relationship: "SIBLING" });
-      addEmergencyContact({ userId, name: "Contact 3", phone: "+919876543213", relationship: "FRIEND" });
+    it("enforces maximum of 3 emergency contacts per user", async () => {
+      await addEmergencyContact({ userId, name: "Contact 1", phone: "+919876543211", relationship: "PARENT" });
+      await addEmergencyContact({ userId, name: "Contact 2", phone: "+919876543212", relationship: "SIBLING" });
+      await addEmergencyContact({ userId, name: "Contact 3", phone: "+919876543213", relationship: "FRIEND" });
 
-      const overflow = addEmergencyContact({
+      const overflow = await addEmergencyContact({
         userId,
         name: "Contact 4",
         phone: "+919876543214",
@@ -70,24 +75,27 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
 
       expect(overflow.success).toBe(false);
       expect(overflow.error).toContain("Maximum of 3 emergency contacts");
-      expect(getUserEmergencyContacts(userId).length).toBe(3);
+      const list = await getUserEmergencyContacts(userId);
+      expect(list.length).toBe(3);
     });
 
-    it("prevents duplicate phone numbers for the same user", () => {
-      addEmergencyContact({ userId, name: "First", phone: "+919876543210", relationship: "SPOUSE" });
-      const duplicate = addEmergencyContact({ userId, name: "Second", phone: "+919876543210", relationship: "FRIEND" });
+    it("prevents duplicate phone numbers for the same user", async () => {
+      await addEmergencyContact({ userId, name: "First", phone: "+919876543210", relationship: "SPOUSE" });
+      const duplicate = await addEmergencyContact({ userId, name: "Second", phone: "+919876543210", relationship: "FRIEND" });
 
       expect(duplicate.success).toBe(false);
       expect(duplicate.error).toContain("already exists");
     });
 
-    it("allows removing contacts", () => {
-      const added = addEmergencyContact({ userId, name: "To Remove", phone: "+919876543210", relationship: "OTHER" });
-      expect(getUserEmergencyContacts(userId).length).toBe(1);
+    it("allows removing contacts", async () => {
+      const added = await addEmergencyContact({ userId, name: "To Remove", phone: "+919876543210", relationship: "OTHER" });
+      const beforeList = await getUserEmergencyContacts(userId);
+      expect(beforeList.length).toBe(1);
 
-      const removed = removeEmergencyContact(userId, added.contact!.id);
+      const removed = await removeEmergencyContact(userId, added.contact!.id);
       expect(removed.success).toBe(true);
-      expect(getUserEmergencyContacts(userId).length).toBe(0);
+      const afterList = await getUserEmergencyContacts(userId);
+      expect(afterList.length).toBe(0);
     });
   });
 
@@ -112,9 +120,9 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       expect(checkDay.istHour).toBe(14);
     });
 
-    it("dispatches auto-share tracking alerts during night rides", () => {
+    it("dispatches auto-share tracking alerts during night rides", async () => {
       const userId = "usr_night_rider";
-      addEmergencyContact({
+      await addEmergencyContact({
         userId,
         name: "Aarti",
         phone: "+919876543210",
@@ -123,7 +131,7 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       });
 
       const nightDate = new Date("2026-10-11T17:30:00Z"); // 23:00 IST
-      const audit = auditNightRideSafety({
+      const audit = await auditNightRideSafety({
         userId,
         riderName: "Rahul",
         originTerminal: "T2",
@@ -139,14 +147,14 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       expect(audit.alertDispatched).toBe(true);
       expect(audit.dispatchedAlerts.length).toBe(1);
       expect(audit.dispatchedAlerts[0].recipientPhone).toBe("+919876543210");
-      expect(audit.dispatchedAlerts[0].messageText).toContain("Rahul");
+      expect(audit.dispatchedAlerts[0].messageText).toContain("[FlightPool MOCK SMS]");
       expect(audit.dispatchedAlerts[0].messageText).toContain("CSMIA T2");
       expect(audit.dispatchedAlerts[0].messageText).toContain("https://flightpool.in/track/token_abc_123");
     });
 
-    it("suppresses auto-share dispatch during daytime journeys", () => {
+    it("suppresses auto-share dispatch during daytime journeys", async () => {
       const userId = "usr_day_rider";
-      addEmergencyContact({
+      await addEmergencyContact({
         userId,
         name: "Aarti",
         phone: "+919876543210",
@@ -155,7 +163,7 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       });
 
       const dayDate = new Date("2026-10-11T08:30:00Z"); // 14:00 IST
-      const audit = auditNightRideSafety({
+      const audit = await auditNightRideSafety({
         userId,
         riderName: "Rahul",
         originTerminal: "T2",
@@ -207,10 +215,11 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
       const json = await res.json();
       expect(json.success).toBe(true);
       expect(json.contact.name).toBe("Mother");
+      expect(json.optInMessage).toContain("[FlightPool MOCK SMS]");
     });
 
     it("lists emergency contacts for authenticated rider with 200", async () => {
-      addEmergencyContact({
+      await addEmergencyContact({
         userId: "usr_api_rider",
         name: "Mother",
         phone: "+919876543210",
@@ -233,7 +242,7 @@ describe("Emergency Trusted Contacts & Night Ride Safety Guard", () => {
     });
 
     it("deletes emergency contact with 200", async () => {
-      const added = addEmergencyContact({
+      const added = await addEmergencyContact({
         userId: "usr_api_rider",
         name: "Mother",
         phone: "+919876543210",
