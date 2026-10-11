@@ -8,7 +8,7 @@
     "vercel-build": "node -e \"if (process.env.VERCEL_ENV === 'production' && process.env.ALLOW_AUTO_MIGRATE === 'true') { require('child_process').execSync('prisma migrate deploy', { stdio: 'inherit' }); }\" && npm run build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run tests/ --exclude \"tests/e2e/**\"",
+    "test": "vitest run tests/ --exclude \"tests/e2e/**\" --exclude \"tests/smoke/**\"",
     "test:load": "tsx scripts/load-test.ts",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test tests/smoke/smoke.spec.ts",

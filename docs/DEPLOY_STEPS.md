@@ -1,12 +1,14 @@
 # FlightPool Deployment Guide & Release Runbook
 
 ## 1. Migration Inventory
-The following Prisma migrations were authored during this upgrade cycle. Each migration is strictly versioned in `prisma/migrations/`:
+The following Prisma migrations are pending or newly authored for this release. Each migration is strictly additive and versioned in `prisma/migrations/`:
 
-| Migration Directory | Key Schema Changes & Effects |
-| :--- | :--- |
-| `20261010182600_add_fare_quote_and_audit_fields` | Adds `FareQuote` table for upfront fare locks, `DriverPayout` table with `status = PENDING` by default, double-entry `LedgerAccount` & `LedgerEntry` foreign keys, and DPDP `AuditLog` fields. |
-| `20261010203807_add_confirmed_at_and_ready_at` | Adds `confirmedAt DateTime?` on `Pool` and `readyAt DateTime?` on `RideRequest` to allow accurate, capped average wait time calculations (`confirmedAt - readyAt`) ignoring stale seed records. |
+| Migration Directory | Statement Types | Key Schema Changes & Additive Safety |
+| :--- | :--- | :--- |
+| `20261010085205_add_farequote_share_tokens_driver_docs` | `CREATE TABLE`, `CREATE INDEX`, `ALTER TABLE ADD CONSTRAINT` | Adds `FareQuote` table for upfront locked pricing, `ShareTripToken` for PII-free public tracking, and `DriverDocument` for driver verification. (Additive ✅) |
+| `20261010201835_add_auto_solo_and_bay_timestamp` | `ALTER TABLE ADD COLUMN` | Adds `RideRequest.autoSoloConsent BOOLEAN NOT NULL DEFAULT false` and `Trip.driverAtBayAt TIMESTAMP(3)`. (Additive ✅) |
+| `20261010203807_add_confirmed_at_and_ready_at` | `ALTER TABLE ADD COLUMN` | Adds `Pool.confirmedAt TIMESTAMP(3)` and `RideRequest.readyAt TIMESTAMP(3)`. Resolves earlier live 500 error on wait calculation. (Additive ✅) |
+| `20261011142006_add_driver_queue_and_emergency_contacts` | `CREATE TABLE`, `CREATE INDEX`, `ALTER TABLE ADD CONSTRAINT` | Adds `DriverQueueEntry` for airport virtual staging queue and `EmergencyContact` for night ride auto-share dispatches and consent lifecycle. (Additive ✅) |
 
 ---
 
@@ -14,15 +16,17 @@ The following Prisma migrations were authored during this upgrade cycle. Each mi
 
 | Variable | Description | Preview | Production | Sensitive |
 | :--- | :--- | :---: | :---: | :---: |
-| `DATABASE_URL` | PostgreSQL connection string (Neon pooler in live; Docker local in dev) | Required | Required | Yes |
+| `DATABASE_URL` | PostgreSQL connection string (Neon direct/pooled in live; Docker local in dev) | Required | Required | Yes |
+| `LIVE_DATABASE_URL` | Local `.env.live` direct Neon connection string for backup and `migrate:live` | N/A (Local only) | N/A (Local only) | Yes (gitignored) |
 | `SESSION_SECRET` | HMAC SHA-256 signing secret for session tokens (&ge; 32 chars) | Required | Required | Yes |
 | `CRON_SECRET` | Bearer token authenticating Vercel cron triggers on `/api/cron/*` | Required | Required | Yes |
 | `DEMO_MODE` | Server-side flag (`"true"` enables simulation & dev OTP; `""` in prod) | Optional | Set to `""` | No |
 | `NEXT_PUBLIC_DEMO_MODE` | Client-side flag controlling UI demo personas & rewards | Optional | Set to `""` | No |
+| `ALLOW_AUTO_MIGRATE` | Opt-in auto-migration flag in `vercel-build` (`"true"` to auto-apply migrations on Vercel) | Optional | Optional (Default: off) | No |
 | `ADMIN_PHONES` | Comma-separated E.164 phone numbers granted ADMIN role | Required | Required | Yes |
-| `RAZORPAY_KEY_ID` | Payment gateway API key identifier | Optional | Required | Yes |
-| `RAZORPAY_KEY_SECRET` | Payment gateway webhook verification secret | Optional | Required | Yes |
-| `FAST2SMS_API_KEY` | Real OTP SMS delivery gateway key | Optional | Required | Yes |
+| `RAZORPAY_KEY_ID` | Payment gateway API key identifier | Optional | Required for real pay | Yes |
+| `RAZORPAY_KEY_SECRET` | Payment gateway webhook verification secret | Optional | Required for real pay | Yes |
+| `FAST2SMS_API_KEY` | Real OTP SMS delivery gateway key | Optional | Optional | Yes |
 
 ---
 
