@@ -147,8 +147,118 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
      - Updated `docs/DEPLOY_STEPS.md` and `docs/UI_REPORT.md`.
      - Verified all 52 Playwright E2E tests, 75+ unit tests, and production build pass with `node scripts/verify.mjs` returning `RESULT: OK`.
 
+---
 
+## Phase 2 (P2 & Scale Features): Pre-Landing Queue, Pluggable SMS/Payments & Rewards
 
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **In-Flight Wi-Fi Pre-Landing Booking Queue**:
+     - `app/api/rides/pre-landing/route.ts`: Queue airborne passengers with status `QUEUED_IN_FLIGHT` and `readyAt = null` (isolated from driver dispatch before landing). Supports real-time queue position telemetry, upfront pricing guarantees, and `TOUCHDOWN_CONFIRMED` transition stamping `readyAt = new Date()` into active `POOLING`.
+     - `app/api/rides/status/route.ts`: Expanded active request filters to include in-flight queued states.
+     - `app/page.tsx`: Activated `#pre-landing-queue-btn` in flight selection, live social proof co-rider counter, and dedicated `QUEUED_IN_FLIGHT` radar card in Step 5 with `#touchdown-ready-btn`.
+     - `tests/pre-landing.test.ts`: 5 comprehensive tests validating parameters, IDOR security, database persistence, queue telemetry, and touchdown transition.
+  2. **Pluggable SMS Gateway Adapters**:
+     - `lib/otp-provider.ts`: Implemented `Fast2SmsOtpProvider` (Indian domestic DLT Quick SMS API), `TwilioOtpProvider` (international/fallback REST API), `MockOtpProvider` (demo mode instant delivery), and `ProductionOtpProviderStub` (fail-closed safe fallback). Dynamic factory resolution via `SMS_PROVIDER` and API keys.
+     - `tests/sms-provider.test.ts`: 11 unit tests validating mock bypass, missing credentials fail-closed, 10-digit phone cleaning, payload formats, and factory resolution.
+  3. **Multi-Gateway Payment Adapters (Razorpay + Cashfree)**:
+     - `lib/payments/provider.ts`: Added `CashfreeLiveProvider` (Cashfree PG Orders API, authorize, capture, refund) and `verifyCashfreeWebhookSignature` (HMAC-SHA256 timestamp + raw body verification). Factory updated to select between Cashfree, Razorpay, or Sandbox Mock.
+     - `tests/payments.test.ts`: Expanded to 9 unit tests verifying authentic/tampered signatures, missing secrets, and Cashfree lifecycle.
+  4. **Loyalty & Rewards Gamification APIs**:
+     - `app/api/rewards/route.ts`: `GET` endpoint returning rider flight score, rank, tier, Green Miles balance, and catalog items. Dual-mode support (demo mode telemetry vs production fail-closed).
+     - `app/api/rewards/redeem/route.ts`: `POST` endpoint validating miles balance and issuing verified perk/credit voucher codes.
+     - `tests/gamification.test.ts`: Expanded to 16 unit tests covering tier mappings, XP thresholds, provider switching, and `/api/rewards` & `/api/rewards/redeem` security and validation.
+- **Verification Results**:
+  - Unit/Integration Tests: 14 suites / 105 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+---
 
+## Phase 2.5 (Scale Features): Promo Coupon Engine, Referral Credits & Demand Forecast Radar
 
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Promo Code & Discount Engine**:
+     - `lib/pricing/promo.ts`: Implemented `validatePromoCode` evaluating active campaigns (`BOMWELCOME`, `FLYPOOL50`, `GREENMUMBAI`, `NIGHTSAFE`, `THANEEXPRESS`). Enforces minimum fares, first-ride restrictions, allowed corridors, expiration timestamps, discount caps, and strict integer paise calculations (`rupeesToPaise` / `paiseToRupees`).
+     - `app/api/promos/validate/route.ts`: `POST` endpoint validating promo codes for authenticated riders against quoted fares and prior ride history.
+     - `app/api/user/referral/route.ts`: `GET` endpoint generating deterministic referral codes (`generateUserReferralCode`) with shareable links and tracking earned credits.
+     - `tests/promo.test.ts`: 13 comprehensive unit and API tests validating discount caps, minimum fares, first-ride enforcement, corridor constraints, 401/400/422 status handling, and referral codes.
+  2. **Predictive Corridor Demand Forecast & Peak Wave Radar**:
+     - `lib/analytics/demand.ts`: Implemented `computeCorridorDemandForecast` analyzing incoming flight arrivals across T1/T2, expected passenger volumes, and historical corridor split (Thane 28%, Powai 22%, Bandra 18%, Andheri 14%, Navi Mumbai 12%, Mulund 6%). Computes hourly wave groupings, active driver allocation, supply deficits, and recommended driver positioning.
+     - `app/api/admin/demand-forecast/route.ts`: `GET` endpoint protected strictly by `ADMIN` role RBAC.
+     - `tests/demand-forecast.test.ts`: 4 tests validating predictive demand wave calculation, corridor breakdown, deficit metrics, and RBAC rejection (401 unauthenticated, 403 non-admin, 200 admin).
+- **Verification Results**:
+  - Unit/Integration Tests: 16 suites / 122 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
 
+---
+
+## Phase 2.6 (Scale Features): Feature Flags, Experimentation Engine & Remote Configuration
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Feature Flags & Rollout Engine**:
+     - `lib/config/feature-flags.ts`: Built deterministic user-bucketing engine (`calculateUserBucket` via SHA-256 modulo 100). Implemented baseline feature flags (`PRE_LANDING_QUEUE`, `WOMEN_ONLY_POOLS`, `DYNAMIC_SURGE_PRICING`, `GREEN_MILES_REWARDS`, `CASHFREE_GATEWAY`, `EXPRESS_BAY_PRIORITY`) with percentage rollouts, role gating, and runtime override registry (`updateFeatureFlag`, `resetFeatureFlagOverrides`).
+     - `app/api/config/flags/route.ts`: Public/rider endpoint evaluating feature flag states for current client or signed-in rider.
+     - `app/api/admin/flags/route.ts`: Admin console endpoint supporting `GET` (full configuration list) and `PATCH` (dynamic rollout percentage and enable/disable adjustments) protected by `ADMIN` RBAC.
+     - `tests/feature-flags.test.ts`: 12 comprehensive unit and integration tests verifying deterministic hashing, percentage gating, role restrictions, anonymous endpoints, and admin configuration endpoints.
+- **Verification Results**:
+  - Unit/Integration Tests: 17 suites / 134 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).---
+
+## Phase 2.7 (Scale Features): GST Invoicing, Trip Receipts & Rider History API
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **GST Compliant Tax Breakdown Engine**:
+     - `lib/invoice.ts`: Implemented `calculateGstBreakdown` and `generateTripReceipt` for HSN/SAC 996412 (Passenger transport service via e-commerce operator). Enforces 5% GST (2.5% CGST + 2.5% SGST intra-state Maharashtra, 0% IGST) computed in strict integer paise precision. Formats legal tax invoice IDs (`INV-YYYY-XXXXXX`) with company GSTIN (`27AABCF1234F1Z8`) and verified breakdown.
+  2. **Trip Receipt Endpoint with Anti-IDOR Defense**:
+     - `app/api/trips/[id]/receipt/route.ts`: Secure `GET` endpoint returning complete tax invoice data. Enforces cross-user IDOR access protection: riders can only access receipts for trips where they were a confirmed pool member; dispatchers and admins retain audit access.
+  3. **Rider Trip History API**:
+     - `app/api/user/trips/route.ts`: `GET` endpoint returning historical trips for the authenticated rider, including corridor, terminal, driver and vehicle details, and direct receipt download links.
+  4. **Test Suite Coverage**:
+     - `tests/receipts.test.ts`: 7 tests covering tax calculation precision, structured invoice generation, authentication enforcement (401), cross-user IDOR protection (403), passenger access (200), admin override (200), and rider trip history (200).
+- **Verification Results**:
+  - Unit/Integration Tests: 18 suites / 141 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+
+---
+
+## Phase 2.8 (Scale Features): Driver Virtual Staging Queue & Emergency Trusted Contacts (Night Ride Safety Guard)
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Driver Virtual Queue & Airport Geofence Staging**:
+     - `lib/driver-queue.ts`: Implemented Great-Circle Haversine distance calculations and airport geofence boundary verification (2.5km radius for CSMIA T1/T2 staging zones). Supports in-memory FIFO staging queues with dynamic bay allocation (`P4 Bay A-D` for T2, `Lane 1 Bay A-B` for T1), heartbeat timeout (15 mins), and wait-time estimations (8 mins/driver).
+     - `app/api/driver/queue/route.ts`: Built secure endpoints for `POST` (check-in with GPS coords & commercial vehicle verification), `GET` (queue position & bay telemetry), and `DELETE` (clean queue exit), protected with strict `DRIVER` and `ADMIN` role-based access control.
+     - `tests/driver-queue.test.ts`: 11 comprehensive tests validating distance math, geofence boundary rejection, FIFO queue progression, wait calculations, RBAC gating (401/403/422), and queue entry/exit lifecycles.
+  2. **Emergency Trusted Contacts & Night Ride Safety Guard**:
+     - `lib/safety/emergency-contacts.ts`: Built trusted family/emergency contact registry enforcing Indian E.164 phone validation (`+91[6-9]\d{9}`), relationship models, max-3 contacts invariant, and duplicate prevention. Implemented IST night ride window detection (21:00 - 06:00 IST) and automated family tracking alert dispatching with live journey URLs.
+     - `app/api/user/emergency-contacts/route.ts`: Built secure `GET`, `POST`, and `DELETE` endpoints for rider trusted contacts with authenticated session management.
+     - `app/api/rides/safety-check/route.ts`: Built `POST` safety audit endpoint evaluating night safety windows and auto-share dispatches with simulated hour support for testing.
+     - `tests/safety-contacts.test.ts`: 14 comprehensive tests validating phone validation, 3-contact caps, duplicate rejection, IST night window logic, auto-share dispatches, daytime suppression, and REST route security.
+- **Verification Results**:
+  - Unit/Integration Tests: 20 suites / 166 tests (25 new tests passing 100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (10 passed, 0 failed).

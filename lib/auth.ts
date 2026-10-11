@@ -19,8 +19,8 @@ export interface SessionPayload {
   exp: number; // Unix timestamp in ms
 }
 
-import { prisma } from "@/lib/prisma";
-import { isDemoMode } from "@/lib/demo";
+import { prisma } from "./prisma";
+import { isDemoMode } from "./demo";
 
 /**
  * Generates SHA-256 hash of an OTP code for secure storage

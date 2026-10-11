@@ -423,6 +423,41 @@ export default function Home() {
     }
   };
 
+  // Rider opts into in-flight pre-landing queue while airborne
+  const handleInFlightPreQueue = async () => {
+    if (!currentUser || !selectedFlight) return;
+    setLoadingAction(true);
+    try {
+      const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
+      const res = await fetch("/api/rides/pre-landing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          flightId: selectedFlight.id,
+          destinationZone: selectedZone,
+          destinationAddress: selectedAddress,
+          destinationLat: zoneInfo.center.lat,
+          destinationLng: zoneInfo.center.lng,
+          luggageCount,
+          womenOnly,
+          pnr: pnrCode,
+          seatNumber: seatCode,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActiveRequest(data.rideRequest);
+        setStep("RIDE_STATE");
+        setRideStatus("QUEUED_IN_FLIGHT");
+      }
+    } catch (e) {
+      console.error("In-flight pre-queue error:", e);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   // Rider confirms pool with mock payment
   const handleConfirmPoolWithPayment = async (method: "UPI" | "CARD" | "NETBANKING") => {
     if (!currentUser || !poolData) return;
@@ -1473,13 +1508,15 @@ export default function Home() {
                       <Button
                         type="button"
                         variant="outline"
-                        disabled
-                        className="w-full py-3 text-xs opacity-60 cursor-not-allowed justify-center border-dashed text-[var(--muted)]"
+                        id="pre-landing-queue-btn"
+                        onClick={handleInFlightPreQueue}
+                        disabled={loadingAction}
+                        className="w-full py-3 text-xs justify-center border-dashed text-[var(--accent)] border-[var(--accent)]/40 hover:bg-[var(--accent)]/10 transition-colors"
                       >
-                        ✈️ I&apos;m still in the air, notify me
+                        ✈️ I&apos;m still in the air, queue my pool
                       </Button>
                       <p className="text-[10px] text-center text-[var(--muted)] mt-1">
-                        Pre-landing pool matching requires in-flight Wi-Fi telemetry (coming soon)
+                        Reserve your pool seat now using in-flight Wi-Fi; matches automatically once you land.
                       </p>
                     </div>
                   </Card>
@@ -1491,6 +1528,64 @@ export default function Home() {
               {/* ===================================================================== */}
               {step === "RIDE_STATE" && (
                 <div className="space-y-4">
+                  {/* IN-FLIGHT QUEUED RADAR STATE */}
+                  {rideStatus === "QUEUED_IN_FLIGHT" && (
+                    <Card className="p-6 border-[var(--border)] bg-[var(--surface)] text-center space-y-4">
+                      {/* Airplane In-Flight Animation */}
+                      <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border border-sky-400/30 animate-pulse" />
+                        <div className="absolute inset-3 rounded-full border border-[var(--accent)]/40" />
+                        <div className="w-16 h-16 rounded-full bg-sky-500/20 text-sky-400 border border-sky-400/40 flex items-center justify-center shadow-xl z-10">
+                          <Plane className="w-7 h-7 transform -rotate-45" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 mb-2">
+                          ✈️ EN ROUTE TO BOM
+                        </div>
+                        <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Flight {selectedFlight?.flightNumber} In the Air
+                        </h2>
+                        <p className="text-xs text-[var(--muted)] mt-1 max-w-xs mx-auto">
+                          You are pre-queued for a shared cab to <b>{selectedZone}</b>. Pool pairing activates upon touchdown.
+                        </p>
+                      </div>
+
+                      <div className="bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)] text-xs flex items-center justify-between">
+                        <span className="text-[var(--muted)]">Corridor Drop-off:</span>
+                        <span className="font-semibold text-[var(--foreground)] truncate max-w-[180px]">
+                          {selectedAddress}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <Button
+                          onClick={handleImReady}
+                          disabled={loadingAction}
+                          className="w-full py-4 text-xs font-bold gap-2"
+                          size="lg"
+                          id="touchdown-ready-btn"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Wheels Down! I&apos;ve Landed &amp; Ready</span>
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setStep("DESTINATION");
+                            setRideStatus("SEARCHING");
+                          }}
+                          className="w-full text-xs text-[var(--muted)] hover:text-[var(--danger)]"
+                          size="sm"
+                        >
+                          Cancel In-Flight Pre-Queue
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
                   {/* SEARCHING RADAR STATE */}
                   {rideStatus === "SEARCHING" && (
                     <Card className="p-6 border-[var(--border)] bg-[var(--surface)] text-center space-y-4">
