@@ -113,6 +113,41 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - Production Build: Next.js Turbopack build succeeded with 0 errors.
   - Overall: `node scripts/verify.mjs` completed with `RESULT: OK`.
 
+---
+
+## Phase UI-0 to UI-5: Design System, Rider Journey, Game Layer & Portals
+
+- **Status**: Completed ✅
+- **Branch**: `fix-live-neon-qa`
+- **Key Deliverables & Actions**:
+  1. **UI-0 (Audit & Design System Foundation)**:
+     - Authored `styles/tokens.css` with WCAG AA compliant contrast tokens across Night Runway, Daylight Terminal, and AMOLED palettes.
+     - Built comprehensive UI primitives (`IconButton`, `Card`, `Badge`, `Avatar`, `Slider`, `Progress`, `Ring`, `Stepper`, `Toast`, `Skeleton`, `EmptyState`, `ErrorState`, `Tooltip`, `Switch`, `Select`, `Input`, `OtpInput`, `Chip`, `Banner`).
+     - Added living design system gallery at `/design` in demo/development mode with zero Axe accessibility violations.
+  2. **UI-1 & UI-2 (Onboarding, Flight Picker, and Rider Journey)**:
+     - Subtitle updated to `"Mumbai Airport Cab Sharing • T1 / T2"`.
+     - Corridor selector buttons enhanced with real-time pool fare (`₹...`), distance (`...km`), and approx travel time (`~...m`).
+     - Wait-vs-Save slider ends explicitly labeled (`"Leave sooner"`, `"Save more"`) with live price and wait updates.
+     - Carbon emissions display cleanly formatted as `"🌱 3.9 kg CO2 saved"` without negative sign.
+     - Secondary action added: `"✈️ I'm still in the air, notify me"` disabled with clear in-flight Wi-Fi telemetry explanation.
+     - Community Savings card replaced with live flight social proof (`"3 co-riders from flight heading to corridor"`).
+     - Map permanently labels all six corridor pins with non-overlapping styled tooltips and 70% dark saturation.
+  3. **UI-3 (Game Layer, Gamification Provider & Boundary)**:
+     - Implemented `lib/gamification/provider.ts` with `GamificationProvider` interface, `MockGamificationProvider` (demo mode active), and `UnavailableGamificationProvider` (production fail-closed).
+     - Defined deterministic tier mapping (`getScoreTier`) and XP rank threshold mapping (`getRankForXp`).
+     - Verified Rewards tab shows explicit `"Demo data"` badge and gauge when demo mode is active, and clean `"FlightDeck Rewards Coming Soon"` when demo mode is false.
+     - Created `tests/gamification.test.ts` (9 unit tests passing) and Playwright E2E tests validating dual-mode behavior.
+  4. **UI-4 (Driver, Marshal, Admin Polish)**:
+     - Driver Portal: Added document status chips (Commercial DL, Airport Permit, PUC) and Today/Week earnings cards.
+     - Marshal View: Added incoming flight arrival waves radar and manual ground PIN verification form.
+     - Admin Dashboard: Added non-dismissible demo mode banner and client-side CSV export of visible pool records.
+  5. **UI-5 (Polish, Quality, DoD & Verification)**:
+     - Added privacy-first analytics instrumentation interface `lib/analytics.ts` (`track(event, props)`) with no PII.
+     - Documented `docs/UI_DOD.md` (Definition of Done checklist).
+     - Updated `docs/DEPLOY_STEPS.md` and `docs/UI_REPORT.md`.
+     - Verified all 52 Playwright E2E tests, 75+ unit tests, and production build pass with `node scripts/verify.mjs` returning `RESULT: OK`.
+
+
 
 
 
