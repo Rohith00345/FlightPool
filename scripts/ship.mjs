@@ -1,43 +1,49 @@
-import { execSync } from "child_process";
-import dotenv from "dotenv";
+// Safe commit and push: node scripts/ship.mjs "your message"   (add --skip-verify to skip the full test run)
+import { git, live } from "./_lib.mjs";
 
-dotenv.config();
-
-console.log("======================================================");
-console.log("🚀 FLIGHTPOOL SHIP SCRIPT (scripts/ship.mjs)");
-console.log("======================================================");
-
-// 1. Verify verify.mjs passes first
-console.log("Running verification pre-check...");
-try {
-  execSync("node scripts/verify.mjs", { stdio: "inherit" });
-} catch (e) {
-  console.error("❌ Pre-ship verification failed. Aborting ship.");
+const args = process.argv.slice(2);
+const skipVerify = args.includes("--skip-verify");
+const message = args.filter((a) => !a.startsWith("--")).join(" ").trim();
+if (!message) {
+  console.error('Usage: node scripts/ship.mjs "commit message" [--skip-verify]');
   process.exit(1);
 }
 
-// 2. Check branch
-const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
-if (branch !== "mega-upgrade") {
-  console.error(`❌ Cannot ship from branch '${branch}'. Must be on 'mega-upgrade'.`);
+if (live("node scripts/preflight.mjs") !== 0) process.exit(1);
+if (!skipVerify && live("node scripts/verify.mjs") !== 0) {
+  console.error("Verification failed. Nothing was committed or pushed.");
   process.exit(1);
 }
 
-// 3. Check for uncommitted changes
-const status = execSync("git status --porcelain", { encoding: "utf8" }).trim();
-if (status) {
-  console.warn("⚠️ Warning: uncommitted changes detected in working tree.");
-}
-
-// 4. Push branch to GitHub
-const shipMsg = process.argv[2] || "Ship mega-upgrade";
-console.log(`\nPushing branch '${branch}' to origin on GitHub ("${shipMsg}")...`);
-try {
-  execSync(`git push -u origin ${branch}`, { stdio: "inherit" });
-  console.log(`\n🎉 Successfully pushed branch '${branch}' to GitHub!`);
-  console.log("Vercel preview build will trigger automatically.");
-  process.exit(0);
-} catch (e) {
-  console.error("\n❌ Failed to push to GitHub:", e.message);
+const branch = git(["branch", "--show-current"]).out;
+if (!branch || branch === "main" || branch === "master") {
+  console.error("Refusing to commit or push on main/master.");
   process.exit(1);
 }
+
+git(["add", "-A"]);
+const staged = git(["diff", "--cached", "--name-only"]).out.split("\n").filter(Boolean);
+const bad = staged.filter((f) => /(^|\/)\.env($|\.)/.test(f) && !f.endsWith(".env.example"));
+if (bad.length) {
+  git(["reset"]);
+  console.error("Refusing: env files were staged: " + bad.join(", "));
+  process.exit(1);
+}
+
+if (staged.length) {
+  const c = git(["commit", "-m", message]);
+  if (c.code !== 0) {
+    console.error("Commit failed:\n" + (c.err || c.out));
+    process.exit(1);
+  }
+  console.log(`Committed ${staged.length} file(s) on ${branch}.`);
+} else {
+  console.log("Nothing new to commit.");
+}
+
+const push = live(`git push -u origin ${branch}`);
+if (push !== 0) {
+  console.error("Push failed. Your work is committed locally and safe.");
+  process.exit(1);
+}
+console.log(`\nPushed. Review it at: https://github.com/Rohith00345/FlightPool/tree/${branch}`);

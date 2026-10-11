@@ -1,77 +1,98 @@
-import { execSync } from "child_process";
-import dotenv from "dotenv";
+// Run before any work: node scripts/preflight.mjs
+// Checks branch, database target, secrets and Docker. Prints only hostnames, never passwords.
+import fs from "node:fs";
+import { git, sh, hostOf, isLocalHost, Report } from "./_lib.mjs";
 
-dotenv.config();
+const r = new Report("FlightPool preflight");
 
-console.log("======================================================");
-console.log("🛫 FLIGHTPOOL PREFLIGHT CHECK (scripts/preflight.mjs)");
-console.log("======================================================");
+// 1. Git and branch
+const branch = git(["branch", "--show-current"]);
+if (branch.code !== 0) {
+  r.add("Git available and this is a repository", "FAIL", branch.err || "git not found");
+} else {
+  r.add("Git available and this is a repository", "PASS");
+  const name = branch.out;
+  if (!name) r.add("On a named branch", "FAIL", "detached HEAD");
+  else if (name === "main" || name === "master") r.add("Not on main", "FAIL", `on '${name}' - create a work branch first`);
+  else r.add("Not on main", "PASS", `branch: ${name}`);
+}
 
-let failed = false;
+// 2. Working tree
+const dirty = git(["status", "--porcelain"]);
+const changed = dirty.out ? dirty.out.split("\n").length : 0;
+r.add("Working tree clean", changed ? "WARN" : "PASS", changed ? `${changed} changed file(s) not committed` : "");
 
-// 1. Branch check
-try {
-  const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
-  if (branch !== "mega-upgrade") {
-    console.error(`❌ Branch check failed: expected 'mega-upgrade', found '${branch}'`);
-    failed = true;
-  } else {
-    console.log(`✓ Active branch is 'mega-upgrade'`);
+// 3. Database target must be local
+const envUrl = process.env.DATABASE_URL;
+if (envUrl) {
+  const h = hostOf(envUrl);
+  r.add("Shell DATABASE_URL is local", isLocalHost(h) ? "PASS" : "FAIL", `host: ${h ?? "unreadable"}${isLocalHost(h) ? "" : " - close this window and open a new one"}`);
+} else {
+  r.add("Shell DATABASE_URL is local", "PASS", "not set in this window (good)");
+}
+if (fs.existsSync(".env")) {
+  const txt = fs.readFileSync(".env", "utf8");
+  const m = txt.match(/^\s*DATABASE_URL\s*=\s*(.+?)\s*$/m);
+  if (!m) r.add(".env DATABASE_URL is local", "WARN", "no DATABASE_URL line found");
+  else {
+    const v = m[1].replace(/^["']|["']$/g, "");
+    const h = hostOf(v);
+    r.add(".env DATABASE_URL is local", isLocalHost(h) ? "PASS" : "FAIL", `host: ${h ?? "unreadable"}`);
   }
-} catch (e) {
-  console.error(`❌ Could not determine git branch: ${e.message}`);
-  failed = true;
+} else {
+  r.add(".env exists", "WARN", "no .env file found");
 }
 
-// 2. Database safety guard
-const dbUrl = process.env.DATABASE_URL || "";
-if (!dbUrl) {
-  console.error(`❌ DATABASE_URL is not set in environment`);
-  failed = true;
-} else {
-  try {
-    const url = new URL(dbUrl);
-    const host = url.hostname.toLowerCase();
-    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
-    if (!isLocal) {
-      console.error(`❌ SAFETY VIOLATION: DATABASE_URL host '${host}' is NOT localhost! Remote DBs forbidden.`);
-      failed = true;
-    } else {
-      console.log(`✓ Database host is strictly local (${host}:${url.port || 5432})`);
-    }
-  } catch (e) {
-    console.error(`❌ Invalid DATABASE_URL format: ${e.message}`);
-    failed = true;
+// 4. .env must never be tracked, staged or in history
+if (fs.existsSync(".env")) {
+  r.add(".env is git-ignored", git(["check-ignore", "-q", ".env"]).code === 0 ? "PASS" : "FAIL");
+}
+r.add(".env is not tracked", git(["ls-files", "--error-unmatch", ".env"]).code === 0 ? "FAIL" : "PASS");
+const hist = git(["log", "--all", "--oneline", "--", ".env"]);
+r.add(".env never appears in git history", hist.out ? "FAIL" : "PASS", hist.out ? "found in history - tell your reviewer" : "");
+const staged = git(["diff", "--cached", "--name-only"]).out.split("\n").filter(Boolean);
+const badStaged = staged.filter((f) => /(^|\/)\.env($|\.)/.test(f) && !f.endsWith(".env.example"));
+r.add("No env files staged", badStaged.length ? "FAIL" : "PASS", badStaged.join(", "));
+
+// 5. Secret scan over tracked and untracked (not ignored) files
+const patterns = [
+  ["Neon-style password", "npg_[A-Za-z0-9]{8,}"],
+  ["old dev password", "flightpool_dev_pass"],
+  ["Razorpay key", "rzp_(live|test)_[A-Za-z0-9]{6,}"],
+  ["AWS access key", "AKIA[0-9A-Z]{16}"],
+  ["Private key block", "-----BEGIN [A-Z ]*PRIVATE KEY-----"],
+];
+const excludes = [":(exclude)package-lock.json", ":(exclude)scripts/preflight.mjs", ":(exclude)docs/screenshots"];
+let leaks = 0;
+for (const [label, pat] of patterns) {
+  const g = git(["grep", "--untracked", "-n", "-I", "-E", pat, "--", ".", ...excludes]);
+  const files = g.out ? [...new Set(g.out.split("\n").map((l) => l.split(":")[0]))] : [];
+  if (files.length) {
+    leaks += files.length;
+    r.add(`No ${label} in files`, "FAIL", `found in: ${files.join(", ")}`);
   }
 }
-
-// 3. Secrets verification
-const sessionSecret = process.env.SESSION_SECRET || process.env.AUTH_SECRET;
-if (!sessionSecret || sessionSecret.length < 32) {
-  console.error(`❌ SESSION_SECRET missing or insecure (min 32 chars required)`);
-  failed = true;
-} else {
-  console.log(`✓ Secure SESSION_SECRET configured (${sessionSecret.length} chars)`);
+// connection strings with credentials that point to a non-local host
+const cs = git(["grep", "--untracked", "-n", "-I", "-E", "postgres(ql)?://[^:@/ ]+:[^@ ]+@[^/ ]+", "--", ".", ...excludes]);
+const remote = [];
+if (cs.out) {
+  for (const line of cs.out.split("\n")) {
+    const m = line.match(/@([^/:?\s"'`]+)/);
+    if (m && !isLocalHost(m[1].toLowerCase()) && !/^(host|hostname|your|example|db|postgres)/i.test(m[1])) remote.push(line.split(":")[0]);
+  }
 }
-
-// 4. Test Prisma DB connection
-try {
-  execSync("npx prisma db execute --schema prisma/schema.prisma --stdin", {
-    input: "SELECT 1;",
-    stdio: ["pipe", "ignore", "pipe"],
-    encoding: "utf8",
-  });
-  console.log(`✓ Local PostgreSQL database connection verified`);
-} catch (e) {
-  console.error(`❌ Could not connect to local database: ${e.message}`);
-  failed = true;
+if (remote.length) {
+  leaks += remote.length;
+  r.add("No remote database credentials in files", "FAIL", `found in: ${[...new Set(remote)].join(", ")}`);
 }
+if (!leaks) r.add("Secret scan (passwords, keys, remote DB URLs)", "PASS");
 
-console.log("======================================================");
-if (failed) {
-  console.error("❌ PREFLIGHT CHECKS FAILED. Fix errors before proceeding.");
-  process.exit(1);
-} else {
-  console.log("✅ ALL PREFLIGHT CHECKS PASSED. Ready to build.");
-  process.exit(0);
-}
+// 6. Tooling
+const major = Number(process.versions.node.split(".")[0]);
+r.add("Node 18 or newer", major >= 18 ? "PASS" : "FAIL", `node ${process.versions.node}`);
+const dk = sh("docker ps --format {{.Names}}");
+if (dk.code !== 0) r.add("Docker running", "WARN", "Docker not reachable - open Docker Desktop before running tests");
+else r.add("Local Postgres container running", /flightpool-postgres/.test(dk.out) ? "PASS" : "WARN", /flightpool-postgres/.test(dk.out) ? "" : "run: docker compose up -d");
+
+r.print();
+process.exit(r.failed ? 1 : 0);

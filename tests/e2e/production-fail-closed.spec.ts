@@ -7,9 +7,10 @@ test.describe("Production Mode Fail-Closed Security Suite (Port 3001)", () => {
   // 1. Dev OTP 123456 must be rejected on production
   test("1. Dev OTP 123456 is strictly rejected in production mode", async ({ request }) => {
     // Attempt login with 123456
+    const testPhone1 = "+919877" + Math.floor(100000 + Math.random() * 900000);
     const res = await request.post(`${PROD_URL}/api/auth/otp`, {
       data: {
-        identifier: "+919877000001",
+        identifier: testPhone1,
         otp: "123456",
         name: "Prod User",
       },
@@ -20,9 +21,10 @@ test.describe("Production Mode Fail-Closed Security Suite (Port 3001)", () => {
     expect(json.error).toContain("Production mode active: Live SMS verification provider required");
 
     // OTP request must NOT return dev otpHint
+    const testPhone2 = "+919877" + Math.floor(100000 + Math.random() * 900000);
     const reqRes = await request.post(`${PROD_URL}/api/auth/otp`, {
       data: {
-        identifier: "+919877000002",
+        identifier: testPhone2,
       },
     });
     expect(reqRes.ok()).toBeTruthy();

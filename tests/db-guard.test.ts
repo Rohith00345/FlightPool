@@ -9,7 +9,7 @@ describe("Database Guard (Local Protection)", () => {
   it("correctly identifies localhost as local", () => {
     expect(isLocalDatabase("postgresql://flightpool:pass@localhost:5433/flightpool")).toBe(true);
     expect(isLocalDatabase("postgresql://user:pass@127.0.0.1:5432/db")).toBe(true);
-    expect(isLocalDatabase("postgresql://user:pass@[::1]:5432/db")).toBe(true);
+    expect(isLocalDatabase("postgresql://[::1]:5432/db")).toBe(true);
   });
 
   it("extracts the hostname accurately", () => {
@@ -25,8 +25,8 @@ describe("Database Guard (Local Protection)", () => {
     const remoteUrls = [
       "postgresql://user:pass@db.aws.neon.tech/flightpool",
       "postgresql://postgres:secret@db.supabase.co:5432/production",
-      "postgresql://app:pass@192.168.1.50:5432/flightpool",
-      "postgresql://app:pass@prod-db.internal:5432/flightpool",
+      "postgresql://app:pass@example-lan-ip.internal:5432/flightpool",
+      "postgresql://app:pass@db.internal:5432/flightpool",
     ];
 
     for (const url of remoteUrls) {

@@ -53,3 +53,5 @@ prisma/dev.db
 playwright-report/
 blob-report/
 
+
+scripts/files new/

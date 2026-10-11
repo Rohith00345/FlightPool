@@ -1,58 +1,38 @@
-import { execSync } from "child_process";
-import dotenv from "dotenv";
-import readline from "readline";
+// Applies migrations to the LIVE (Neon) database. It never resets or seeds.
+// Usage (in a NEW Command Prompt window): set "DATABASE_URL=<your Neon direct URL>" then: node scripts/migrate-live.mjs
+import readline from "node:readline/promises";
+import { live, hostOf, isLocalHost } from "./_lib.mjs";
 
-dotenv.config();
-
-console.log("======================================================");
-console.log("🗄️ FLIGHTPOOL LIVE DATABASE MIGRATION RUNNER");
-console.log("======================================================");
-
-const targetUrl = process.env.NEON_DATABASE_URL || process.env.LIVE_DATABASE_URL || process.env.DATABASE_URL;
-
-if (!targetUrl) {
-  console.error("❌ Target database URL missing. Set NEON_DATABASE_URL, LIVE_DATABASE_URL, or DATABASE_URL.");
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error('DATABASE_URL is not set in this window. Run: set "DATABASE_URL=your-neon-url"  then try again.');
   process.exit(1);
 }
-
-try {
-  const url = new URL(targetUrl);
-  console.log(`Target database host: ${url.hostname}`);
-  console.log(`Database name:        ${url.pathname.replace(/^\//, "")}`);
-} catch (e) {
-  console.error("❌ Invalid target database URL format.");
+const host = hostOf(url);
+if (!host) {
+  console.error("DATABASE_URL could not be read. Put the whole address in quotes in the set command.");
   process.exit(1);
 }
-
-async function run() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const answer = await new Promise((resolve) => {
-    rl.question("\n⚠️ You are about to apply migrations to a LIVE database.\nType 'MIGRATE LIVE' to confirm: ", (input) => {
-      rl.close();
-      resolve(input.trim());
-    });
-  });
-
-  if (answer !== "MIGRATE LIVE") {
-    console.error("❌ Confirmation failed. Expected 'MIGRATE LIVE'. Aborting.");
-    process.exit(1);
-  }
-
-  console.log("\nDeploying pending Prisma migrations...");
-  try {
-    execSync("npx prisma migrate deploy", {
-      env: { ...process.env, DATABASE_URL: targetUrl },
-      stdio: "inherit",
-    });
-    console.log("\n✅ Live database migration completed successfully.");
-  } catch (e) {
-    console.error("\n❌ Migration deployment failed:", e.message);
-    process.exit(1);
-  }
+if (isLocalHost(host)) {
+  console.error("This is a local database. This script is only for the live database. Nothing was changed.");
+  process.exit(1);
 }
+if (/-pooler\./.test(host)) {
+  console.error("This looks like a pooled address. Use the DIRECT connection string (pooling switched off) for migrations.");
+  process.exit(1);
+}
+console.log(`Target database host: ${host}`);
+console.log("Step 1 of 2: read-only status check\n");
+if (live("npx prisma migrate status") > 1) process.exit(1);
 
-run();
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const answer = await rl.question('\nType MIGRATE LIVE to apply the pending migrations to this database (anything else cancels): ');
+rl.close();
+if (answer.trim() !== "MIGRATE LIVE") {
+  console.log("Cancelled. Nothing was changed.");
+  process.exit(0);
+}
+console.log("\nStep 2 of 2: applying migrations (deploy only, no reset)\n");
+const code = live("npx prisma migrate deploy");
+console.log(code === 0 ? "\nDone. Now close this window so the address is cleared from memory." : "\nMigration failed. Do not merge to main. Copy the error (without any password) and ask for help.");
+process.exit(code);
