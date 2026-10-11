@@ -36,38 +36,75 @@ The following Prisma migrations were authored during this upgrade cycle. Each mi
 ---
 
 ## 4. Exact Execution Order (Production Rollout)
-*Follow this exact sequence. Do NOT merge to `main` until Steps 1 and 2 are complete.*
+*Follow this exact sequence to deploy without database downtime or schema drift.*
 
-1. **Step 1: Execute Database Migrations against Neon**
-   - Open a **NEW Command Prompt** window (do not reuse the development window).
-   - `cd` into the FlightPool repository folder.
-   - Set the direct Neon database connection string:
-     ```cmd
-     set "DATABASE_URL=your direct Neon string"
-     ```
-   - Run the live migration script:
-     ```cmd
-     node scripts\migrate-live.mjs
-     ```
-   - When prompted, type `MIGRATE LIVE` to confirm deployment.
-   - Once migrations complete, close the Command Prompt window.
+### Step 1: Database Migration to Neon (Pick Option A or Option B)
 
-2. **Step 2: Add / Verify Vercel Environment Variables**
-   - Go to Vercel Dashboard &rarr; Project &rarr; **Settings** &rarr; **Environment Variables**.
-   - Verify every variable in Section 2 is configured. If Preview variables are missing, tick **Preview** for each variable in Vercel settings.
-   - Ensure `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_PHONES`, and `DATABASE_URL` are present for both Preview and Production.
-   - Keep `DEMO_MODE` empty or `"false"` in Production.
+#### Option A: Manual Local Execution (Recommended)
+1. Open a **NEW Command Prompt** window (do not reuse the development window).
+2. `cd` into the FlightPool repository folder:
+   ```cmd
+   cd /d "C:\Users\Rohith Nambaru\.gemini\antigravity-ide\scratch\flightpool"
+   ```
+3. Set the direct Neon database connection string (pooler or unpooled direct):
+   ```cmd
+   set "DATABASE_URL=your direct Neon string"
+   ```
+4. Run the live migration script:
+   ```cmd
+   node scripts\migrate-live.mjs
+   ```
+5. When prompted, type `MIGRATE LIVE` to apply all pending versioned migrations.
+6. Once migrations complete, close the Command Prompt window.
 
-3. **Step 3: Merge to `main` on GitHub**
-   - Open GitHub &rarr; Create a Pull Request from `mega-upgrade` into `main`.
-   - Verify CI checks pass, then **Merge Pull Request**.
-   - Vercel will trigger the live production deployment automatically.
+#### Option B: Automated Migration via Vercel Build
+1. Go to Vercel Dashboard &rarr; Project &rarr; **Settings** &rarr; **Environment Variables**.
+2. Add the environment variable:
+   - Key: `ALLOW_AUTO_MIGRATE`
+   - Value: `true`
+   - Target: **Production** and **Preview**
+3. When Vercel runs `npm run vercel-build`, it will safely execute `prisma migrate deploy` before building the Next.js production bundle.
 
-4. **Rollback Plan (Emergency Contingency)**:
-   - If the live site breaks after deployment:
-   - Go to Vercel Dashboard &rarr; **Deployments**.
-   - Locate the last known good deployment.
-   - Click the three dots (`...`) &rarr; **Promote to Production**.
+---
+
+### Step 2: Add / Verify Vercel Environment Variables
+- Go to Vercel Dashboard &rarr; Project &rarr; **Settings** &rarr; **Environment Variables**.
+- Verify every variable in Section 2 is configured:
+  - `DATABASE_URL` (direct Neon connection string)
+  - `SESSION_SECRET` (&ge; 32 characters)
+  - `CRON_SECRET` (&ge; 32 characters)
+  - `ADMIN_PHONES` (e.g. `+919999999999`)
+  - `DEMO_MODE` must be empty or `"false"` in Production.
+
+---
+
+### Step 3: Merge to `main` on GitHub
+1. Open GitHub &rarr; Create a Pull Request from `fix-live-neon-qa` into `main`.
+2. Verify CI checks pass, then **Merge Pull Request**.
+3. Vercel triggers the production deployment.
+
+---
+
+### Step 4: Post-Deploy Health Check Verification
+Immediately verify the deployment using the newly provisioned health check endpoints:
+1. **Public DB Ping**:
+   ```bash
+   curl -s https://your-production-app.vercel.app/api/health
+   ```
+   Must return HTTP 200 with `{"status":"ok","database":"connected"}`.
+2. **Admin Schema Contract Validation**:
+   ```bash
+   curl -s -H "Authorization: Bearer <ADMIN_SESSION_TOKEN>" https://your-production-app.vercel.app/api/admin/health
+   ```
+   Must return HTTP 200 with `{"status":"ok","contract":"valid"}` confirming that all tables and hot-spot columns (`readyAt`, `driverAtBayAt`, `confirmedAt`) exist without drift.
+
+---
+
+### Step 5: Rollback Plan (Emergency Contingency)
+If any critical issue arises:
+1. Go to Vercel Dashboard &rarr; **Deployments**.
+2. Locate the previous deployment.
+3. Click the three dots (`...`) &rarr; **Promote to Production**.
 
 ---
 
