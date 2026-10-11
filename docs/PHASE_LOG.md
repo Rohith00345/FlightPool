@@ -240,3 +240,25 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
   - ESLint (`npm run lint`): 0 errors.
   - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
   - `node scripts/verify.mjs`: `RESULT: OK` (8 passed, 0 failed).
+
+---
+
+## Phase 2.8 (Scale Features): Driver Virtual Staging Queue & Emergency Trusted Contacts (Night Ride Safety Guard)
+
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Deliverables**:
+  1. **Driver Virtual Queue & Airport Geofence Staging**:
+     - `lib/driver-queue.ts`: Implemented Great-Circle Haversine distance calculations and airport geofence boundary verification (2.5km radius for CSMIA T1/T2 staging zones). Supports in-memory FIFO staging queues with dynamic bay allocation (`P4 Bay A-D` for T2, `Lane 1 Bay A-B` for T1), heartbeat timeout (15 mins), and wait-time estimations (8 mins/driver).
+     - `app/api/driver/queue/route.ts`: Built secure endpoints for `POST` (check-in with GPS coords & commercial vehicle verification), `GET` (queue position & bay telemetry), and `DELETE` (clean queue exit), protected with strict `DRIVER` and `ADMIN` role-based access control.
+     - `tests/driver-queue.test.ts`: 11 comprehensive tests validating distance math, geofence boundary rejection, FIFO queue progression, wait calculations, RBAC gating (401/403/422), and queue entry/exit lifecycles.
+  2. **Emergency Trusted Contacts & Night Ride Safety Guard**:
+     - `lib/safety/emergency-contacts.ts`: Built trusted family/emergency contact registry enforcing Indian E.164 phone validation (`+91[6-9]\d{9}`), relationship models, max-3 contacts invariant, and duplicate prevention. Implemented IST night ride window detection (21:00 - 06:00 IST) and automated family tracking alert dispatching with live journey URLs.
+     - `app/api/user/emergency-contacts/route.ts`: Built secure `GET`, `POST`, and `DELETE` endpoints for rider trusted contacts with authenticated session management.
+     - `app/api/rides/safety-check/route.ts`: Built `POST` safety audit endpoint evaluating night safety windows and auto-share dispatches with simulated hour support for testing.
+     - `tests/safety-contacts.test.ts`: 14 comprehensive tests validating phone validation, 3-contact caps, duplicate rejection, IST night window logic, auto-share dispatches, daytime suppression, and REST route security.
+- **Verification Results**:
+  - Unit/Integration Tests: 20 suites / 166 tests (25 new tests passing 100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (10 passed, 0 failed).
