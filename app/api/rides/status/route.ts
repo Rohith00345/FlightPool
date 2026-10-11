@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const rideRequest = await prisma.rideRequest.findFirst({
       where: {
         userId,
-        status: { in: ["SEARCHING", "POOLING", "CONFIRMED", "SOLO", "COMPLETED", "WAIT_CAP_EXPIRED"] },
+        status: { in: ["QUEUED_IN_FLIGHT", "SEARCHING", "POOLING", "CONFIRMED", "SOLO", "COMPLETED", "WAIT_CAP_EXPIRED"] },
       },
       include: {
         flight: true,

@@ -147,8 +147,32 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
      - Updated `docs/DEPLOY_STEPS.md` and `docs/UI_REPORT.md`.
      - Verified all 52 Playwright E2E tests, 75+ unit tests, and production build pass with `node scripts/verify.mjs` returning `RESULT: OK`.
 
+---
 
+## Phase 2 (P2 Feature): In-Flight Wi-Fi Pre-Landing Booking Queue
 
-
+- **Status**: Completed ✅
+- **Branch**: `phase-2-pre-landing`
+- **Files Touched**:
+  - `app/api/rides/pre-landing/route.ts` (created): Complete in-flight booking queue route implementing:
+    - `POST`: Pre-booking queue holding airborne passengers in `QUEUED_IN_FLIGHT` state with `readyAt = null` (isolated from driver dispatches before landing). Computes upfront solo vs pool quotes, saving guarantees, luggage fit, and verifies passenger verification record. Includes strict session authentication and cross-user IDOR protection.
+    - `GET`: Returns real-time in-flight queue telemetry, active flight details, queue position, estimated savings, and touchdown confirmation readiness.
+    - `PATCH`: Handles `TOUCHDOWN_CONFIRMED` transition, activating the request into `POOLING` state and stamping `readyAt = new Date()`, or `CANCEL`.
+  - `app/api/rides/status/route.ts`: Updated query status filter to include `QUEUED_IN_FLIGHT` alongside active matching statuses.
+  - `app/page.tsx`: Activated `#pre-landing-queue-btn` in Step 3 for airborne passengers, with live flight social proof counter and dedicated `QUEUED_IN_FLIGHT` radar card in Step 5 featuring the `#touchdown-ready-btn` touchdown confirmation trigger.
+  - `tests/pre-landing.test.ts` (created): 5 thorough integration tests verifying:
+    1. Validation rejection of missing parameters (400).
+    2. RBAC/IDOR prevention on cross-user queue submissions (403).
+    3. Creation and database persistence of `QUEUED_IN_FLIGHT` state with `null` `readyAt`.
+    4. Retrieval of in-flight queue telemetry via `GET /api/rides/pre-landing`.
+    5. Seamless touchdown confirmation and transition to `POOLING` with stamped `readyAt` via `PATCH`.
+  - `lib/auth.ts`, `lib/retention.ts`, `lib/otp-provider.ts`, `lib/notifications/provider.ts`: Standardized imports to relative paths for universal compatibility across Next.js and Vitest.
+- **Verification Results**:
+  - Unit/Integration Tests: 13 suites / 82 tests passing (100%).
+  - Playwright E2E Tests: 52 tests passing (100%).
+  - TypeScript (`tsc --noEmit`): 0 errors.
+  - ESLint (`npm run lint`): 0 errors.
+  - `node scripts/preflight.mjs`: `RESULT: OK` (11 passed, 0 failed).
+  - `node scripts/verify.mjs`: `RESULT: OK` (9 passed, 0 failed).
 
 

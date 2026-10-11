@@ -1,4 +1,4 @@
-import { isDemoMode } from "@/lib/demo";
+import { isDemoMode } from "./demo";
 
 /**
  * OTP Delivery Provider Interface
