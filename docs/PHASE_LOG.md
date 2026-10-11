@@ -89,18 +89,29 @@ All existing unit and E2E tests must remain green. Changes, touched files, test 
 
 ---
 
-## Phase 3: Pool Engine Reliability (Next Phase)
+---
 
-- **Status**: Ready to Implement 🚀
-- **Scope (Aligned with Mega Prompt)**:
-  1. **Optimistic Locking**:
-     - Concurrency control on `pools.version` to prevent race conditions during rapid concurrent passenger joins (`UPDATE pools SET version = version + 1 WHERE id = $1 AND version = $2`).
-  2. **Server-Side Wait-Cap and Expiry Jobs**:
-     - Background evaluation of passenger wait caps (default 20 minutes) to transition unpooled riders to solo fallback or extend wait time.
-  3. **Fare Quote Records (`FareQuote` model)**:
-     - Persisted fare quotes ensuring guaranteed upfront fare calculations remain tamper-proof from quote to payment.
-  4. **Server-Sent Events (SSE)**:
-     - Real-time updates via `/api/pools/[id]/stream` and `/api/trips/[id]/stream` using standard HTTP text/event-stream for live radar and driver tracking.
+## Phase QA-0 to QA-5: Comprehensive QA, Database Drift & Hardening
+
+- **Status**: Completed ✅
+- **Branch**: `fix-live-neon-qa`
+- **Key Deliverables & Actions**:
+  1. **QA-0 (Baseline & Reset)**: Reset local database on PostgreSQL 16 container (`localhost:5433`), executed `npm run db:seed:demo`, created `docs/QA_BASELINE.md` and initial `docs/BUG_LOG.md`.
+  2. **QA-1 (Database Integrity & Contract Enforcement)**:
+     - Verified zero drift between `prisma/migrations` and `prisma/schema.prisma` using shadow database `flightpool_shadow`.
+     - Authored `tests/db-contract.test.ts` validating all Prisma DMMF models and scalar columns exist in PostgreSQL.
+     - Implemented `GET /api/health` (public DB ping) and `GET /api/admin/health` (admin contract verification with 503 on drift).
+     - Added opt-in `vercel-build` auto-migration script in `package.json` gated on `VERCEL_ENV=production` & `ALLOW_AUTO_MIGRATE=true`.
+  3. **QA-2 (Exploratory Verification)**: Authored `docs/QA_CHECKLIST.md` documenting end-to-end journey matrices, edge cases, wait-cap solo fallbacks, safety SOS incident triage, and ledger balancing.
+  4. **QA-3 (Bug Resolution & Regression Prevention)**: Resolved all tracked issues (BUG-01 through BUG-05), fixed connection pooling singleton in `lib/prisma.ts`, fixed IPv6 preflight parse in `tests/db-guard.test.ts`, and eliminated test rate limits.
+  5. **QA-4 (Permanent Safety Net)**: Created `tests/e2e/smoke.spec.ts` (5 automated smoke journeys) and added `npm run test:smoke`.
+  6. **QA-5 (Audit Report & Deployment Runbook)**: Authored `docs/QA_REPORT.md` and updated `docs/DEPLOY_STEPS.md` with step-by-step instructions for live Neon migration (Option A manual, Option B automated Vercel build) and post-deploy health verification.
+- **Verification Results**:
+  - `node scripts/preflight.mjs`: 11 passed, 0 failed (`RESULT: OK`).
+  - Unit/Integration Tests: 11 suites / 68 tests passing (100%).
+  - Playwright E2E Tests: 49 tests passing (100% across all suites).
+  - Production Build: Next.js Turbopack build succeeded with 0 errors.
+  - Overall: `node scripts/verify.mjs` completed with `RESULT: OK`.
 
 
 
