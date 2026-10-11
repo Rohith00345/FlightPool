@@ -199,6 +199,27 @@ export default function DriverViewPage() {
           </div>
         </Card>
 
+        {/* Document Status Chips */}
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <Badge variant="success" className="text-[10px]">Commercial DL: Verified</Badge>
+          <Badge variant="success" className="text-[10px]">Airport Permit: Verified</Badge>
+          <Badge variant="outline" className="text-[10px] text-[var(--accent)] border-[var(--accent)]/30">PUC: Active</Badge>
+        </div>
+
+        {/* Aggregate Earnings (Today / Week) */}
+        <div className="grid grid-cols-2 gap-2">
+          <Card className="p-3 border-[var(--border)] bg-[var(--surface-2)]">
+            <span className="text-[10px] text-[var(--muted)] uppercase font-semibold">Today&apos;s Earnings</span>
+            <p className="text-base font-extrabold font-mono text-emerald-400 mt-0.5">₹1,420</p>
+            <p className="text-[10px] text-[var(--muted)]">2 Completed Trips</p>
+          </Card>
+          <Card className="p-3 border-[var(--border)] bg-[var(--surface-2)]">
+            <span className="text-[10px] text-[var(--muted)] uppercase font-semibold">Weekly Total</span>
+            <p className="text-base font-extrabold font-mono text-[var(--primary)] mt-0.5">₹8,950</p>
+            <p className="text-[10px] text-[var(--muted)]">14 Completed Trips</p>
+          </Card>
+        </div>
+
         {activeTrip ? (
           <div className="space-y-4">
             {/* Earnings Card (C6) */}

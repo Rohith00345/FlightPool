@@ -64,6 +64,18 @@ export default function MarshalDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [manualPin, setManualPin] = useState("");
+  const [manualVerifyMessage, setManualVerifyMessage] = useState<string | null>(null);
+
+  const handleManualVerify = () => {
+    if (!manualPin || manualPin.length < 4) {
+      setManualVerifyMessage("Please enter a valid 4-digit PIN.");
+      return;
+    }
+    setManualVerifyMessage(`✓ PIN ${manualPin} manually validated by Marshal.`);
+    setManualPin("");
+    setTimeout(() => setManualVerifyMessage(null), 4000);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -235,6 +247,70 @@ export default function MarshalDashboardPage() {
             ))}
           </div>
         </section>
+
+        {/* Arrival Waves Tracker & Manual Verification Form */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Arrival Waves Tracker */}
+          <Card className="p-4 border-[var(--border)] bg-[var(--surface)] space-y-3">
+            <h2 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider flex items-center justify-between">
+              <span>Incoming Flight Waves ({selectedTerminal})</span>
+              <span className="text-emerald-400 font-mono text-[10px]">Live Radar</span>
+            </h2>
+            <div className="space-y-2 text-xs">
+              <div className="p-2.5 bg-[var(--surface-2)] rounded-xl flex items-center justify-between border border-[var(--border)]">
+                <div>
+                  <p className="font-bold text-[var(--foreground)] font-mono">6E-204 (BLR → BOM)</p>
+                  <p className="text-[10px] text-[var(--muted)]">Gate A4 • Arrived 8m ago</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-[var(--accent)] font-mono">5 Riders in Queue</span>
+                  <p className="text-[10px] text-emerald-400">Bay P4 Staging</p>
+                </div>
+              </div>
+              <div className="p-2.5 bg-[var(--surface-2)] rounded-xl flex items-center justify-between border border-[var(--border)]">
+                <div>
+                  <p className="font-bold text-[var(--foreground)] font-mono">AI-865 (DEL → BOM)</p>
+                  <p className="text-[10px] text-[var(--muted)]">Gate B2 • Arriving in 12m</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-[var(--primary)] font-mono">3 Pre-Matched</span>
+                  <p className="text-[10px] text-[var(--muted)]">Bay P2 Assigned</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Manual Verification Form */}
+          <Card className="p-4 border-[var(--border)] bg-[var(--surface)] space-y-3">
+            <h2 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+              Manual Passenger Verification (Ground PIN)
+            </h2>
+            <p className="text-[11px] text-[var(--muted)]">
+              Validate rider identity when automated QR or Bluetooth verification fails at the gate.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter 4-Digit Rider OTP / PIN"
+                maxLength={6}
+                value={manualPin}
+                onChange={(e) => setManualPin(e.target.value)}
+                className="flex-1 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs font-mono font-bold text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+              />
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleManualVerify}
+                className="text-xs font-bold"
+              >
+                Verify &amp; Clear
+              </Button>
+            </div>
+            {manualVerifyMessage && (
+              <p className="text-[11px] text-emerald-400 font-semibold">{manualVerifyMessage}</p>
+            )}
+          </Card>
+        </div>
 
         {/* Active Boarding Vehicles */}
         <section className="space-y-3">

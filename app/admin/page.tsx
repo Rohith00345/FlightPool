@@ -94,6 +94,30 @@ export default function AdminPage() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState("");
 
+  const exportPoolsCSV = () => {
+    if (!data?.pools || data.pools.length === 0) return;
+    const headers = ["Pool ID", "Corridor", "Terminal", "Status", "Riders", "Driver", "Vehicle", "Created At"];
+    const rows = data.pools.map((p: AdminPool) => [
+      p.id,
+      p.destinationCluster,
+      p.terminal,
+      p.displayLabel || p.status,
+      p.membersCount,
+      p.driverName,
+      p.vehicle,
+      p.createdAt,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `flightpool_pools_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const fetchMetrics = async () => {
     try {
       const res = await fetch("/api/admin/metrics");
@@ -213,6 +237,14 @@ export default function AdminPage() {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {demoMode && (
+          <div className="bg-[var(--primary)]/10 border border-[var(--primary)]/30 rounded-2xl px-4 py-2.5 flex items-center justify-between text-xs text-[var(--primary)] font-semibold shadow-xs">
+            <span className="flex items-center gap-2">
+              <Plane className="w-4 h-4" /> Demo Mode Active: Deterministic Mumbai airport simulations enabled.
+            </span>
+            <Badge variant="glow" className="text-[10px]">DEMO ACTIVE</Badge>
+          </div>
+        )}
         {unauthorized && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center gap-3">
@@ -417,6 +449,14 @@ export default function AdminPage() {
                 <Layers className="w-4 h-4 text-[var(--accent)]" />
                 <span>Active Airport Pools ({data?.pools?.length || 0})</span>
               </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportPoolsCSV}
+                className="text-[10px] py-1 px-2.5 h-7"
+              >
+                Export CSV
+              </Button>
             </div>
 
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
