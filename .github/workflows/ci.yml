@@ -2,13 +2,13 @@ name: FlightPool CI
 
 on:
   push:
-    branches: [ finish-upgrade, production-upgrade, mega-upgrade ]
+    branches: [ main, "release-*" ]
   pull_request:
     branches: [ main ]
 
 jobs:
   test-and-build:
-    name: Lint, Unit Test, E2E & Production Build
+    name: Drift Check, Contract Test, Unit Test, E2E & Production Build
     runs-on: ubuntu-latest
 
     services:
@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify Schema Drift (Zero Drift)
+        run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code
+
       - name: ESLint Code Quality Verification
         run: npm run lint
 
@@ -61,6 +64,9 @@ jobs:
       - name: Seed Reference & Demo Data
         run: npm run db:seed:demo
 
+      - name: Run Database Contract Test
+        run: npx vitest run tests/db-contract.test.ts
+
       - name: Run Vitest Unit Tests
         run: npm test
 
@@ -72,3 +78,6 @@ jobs:
 
       - name: Run Playwright End-to-End Suite
         run: npm run test:e2e
+
+      - name: Run Smoke Suite
+        run: npm run test:smoke

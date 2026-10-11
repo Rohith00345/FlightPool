@@ -59,3 +59,31 @@ This checklist defines the critical exploratory journeys, verification matrices,
   - `RideRequest.readyAt` (Timestamp of passenger ready state)
   - `Trip.driverAtBayAt` (Timestamp of driver reaching terminal bay)
   - `Pool.confirmedAt` (Timestamp of pool confirmation)
+
+---
+
+## 5. Phase R4 Full End-to-End QA Execution Results
+
+| Dimension / Test Item | Viewport / Theme | Observed Result | Status |
+| :--- | :--- | :--- | :--- |
+| **Landing & Hero View** | 390x844 & 1440x900 (Dark/Light) | Zero layout shift; "Night Runway" aesthetic rendered cleanly; test personas hidden outside demo mode | PASS ✅ |
+| **Demo Persona Injection** | 390x844 (Mobile) | Small "Try demo" control injects personas only when `DEMO_MODE=true` | PASS ✅ |
+| **Flight Search & Confirmation** | 1440x900 (Desktop) | Real-time flight schedule filters, boarding verification modal, explicit consent recording | PASS ✅ |
+| **All 6 Corridors** | 390x844 (Mobile) | Colaba, BKC, Andheri, Powai, Navi Mumbai, Thane selectable with accurate distance/time estimates | PASS ✅ |
+| **Wait-vs-Save Slider** | 1440x900 (Desktop) | Extreme values (5 min vs 25 min wait cap) compute transparent paise fares dynamically | PASS ✅ |
+| **Corridor "I've landed & ready"** | 390x844 (Mobile) | Advances to pool state; stores `readyAt`; error alert and retry button functional on failure | PASS ✅ |
+| **Pool Forming (1, 2, 3 riders)** | 1440x900 (Desktop) | Capacity capped at 3; concurrency stress test (20 simultaneous joins) maintains capacity <= 3 | PASS ✅ |
+| **Re-quote Consent & Solo Option** | 390x844 (Mobile) | Mid-pool rider departure triggers re-quote consent prompt; explicit rider consent required | PASS ✅ |
+| **Mock Payments & Retries** | 1440x900 (Desktop) | Mock Razorpay/UPI success, failure recovery, and idempotency verified | PASS ✅ |
+| **Driver Virtual Queue & Staging** | 390x844 (Mobile) | 2.5km CSMIA geofence enforced; FIFO ordering; bay assignments (P4 Bay A-D) persist in PostgreSQL | PASS ✅ |
+| **Night Ride Safety & SOS** | 390x844 (Mobile) | IST 21:00-06:00 window detected; mock SMS dispatches tracking link with zero rider PII; SOS triggers incident | PASS ✅ |
+| **DPDP "Delete My Data"** | 1440x900 (Desktop) | Purges passenger profile, ride history, and trusted emergency contacts completely | PASS ✅ |
+| **Admin Operations & Metrics** | 1440x900 (Desktop) | Avg wait time correctly bounded; simulator runs twice idempotently; "Captured revenue (completed trips)" | PASS ✅ |
+| **WCAG AA Accessibility** | Mobile & Desktop | Axe automated accessibility scan passes with 0 violations across Home and Design Gallery | PASS ✅ |
+
+### E2E Suite 3x Repetition (Flakiness Audit)
+- **Run 1**: 56 passed, 1 skipped (read-only write guard), 0 failed (41.1s)
+- **Run 2**: 56 passed, 1 skipped (read-only write guard), 0 failed (41.2s)
+- **Run 3**: 56 passed, 1 skipped (read-only write guard), 0 failed (40.9s)
+- **Flaky Tests**: 0 (100% deterministic reproducibility across 3 consecutive runs)
+

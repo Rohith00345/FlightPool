@@ -7,15 +7,19 @@ const sessionSecret = process.env.SESSION_SECRET || "test_jwt_session_secret_min
 process.env.SESSION_SECRET = sessionSecret;
 const adminPhones = process.env.ADMIN_PHONES || "+919999999999";
 
+const smokeBaseUrl = process.env.SMOKE_BASE_URL;
+const isExternalTarget = !!smokeBaseUrl && !smokeBaseUrl.includes("localhost") && !smokeBaseUrl.includes("127.0.0.1");
+
 export default defineConfig({
-  testDir: "./tests/e2e",
+  testDir: "./tests",
+  testMatch: /.*\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: smokeBaseUrl || "http://localhost:3000",
     trace: "on-first-retry",
     headless: true,
   },
@@ -25,7 +29,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: [
+  webServer: isExternalTarget ? undefined : [
     {
       command: "npm run start",
       url: "http://localhost:3000",
