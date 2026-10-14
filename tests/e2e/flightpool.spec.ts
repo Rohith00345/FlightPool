@@ -297,18 +297,43 @@ test.describe("FlightPool Main End-to-End Journeys", () => {
     await expect(page.locator("header").locator("text=FlightPool")).toBeVisible();
     await expect(page.locator("header").locator("text=BOM")).toBeVisible();
 
-    // Verify Login Button exists
+    // Click "See my fare" to proceed to flight & corridor selection
+    const seeMyFareBtn = page.locator("#see-my-fare-btn");
+    await expect(seeMyFareBtn).toBeVisible();
+    await seeMyFareBtn.click();
+
+    // Flight selection
+    await expect(page.locator("text=Select Your Flight")).toBeVisible();
+    await page.locator("#flight-confirm-btn").click();
+
+    // Boarding pass verification
+    await expect(page.locator("text=Verify Boarding Pass")).toBeVisible();
+    await page.locator("#verify-pass-btn").click();
+
+    // Destination & fare selection
+    await expect(page.locator("text=Select Drop-off Corridor")).toBeVisible();
+    const readyBtn = page.locator("#request-ride-btn");
+    await expect(readyBtn).toBeVisible();
+    await readyBtn.click();
+
+    // Now Login Form appears after "See my fare" and pool confirmation
     const loginBtn = page.locator("#login-btn");
     await expect(loginBtn).toBeVisible();
 
+    // Click "Try demo" button to reveal personas in demo mode
+    const demoToggle = page.locator("#demo-persona-toggle").first();
+    await expect(demoToggle).toBeVisible();
+    await demoToggle.click();
+
     // Click Aarav Sharma Quick Persona
     const quickAarav = page.locator("text=Aarav Sharma").first();
+    await expect(quickAarav).toBeVisible();
     await quickAarav.click();
 
-    // Submit Auth
+    // Submit Auth & Pool Confirmation
     await loginBtn.click();
 
-    // Should progress to Flight selection
-    await expect(page.locator("text=Select Your Flight")).toBeVisible();
+    // Should progress to Active / Finding Cohort state
+    await expect(page.locator("text=Scanning Pool Formation...").or(page.locator("text=Active Pool"))).toBeVisible();
   });
 });

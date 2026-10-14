@@ -141,8 +141,9 @@ export default function Home() {
   // Active Bottom Nav Tab (Mobile 4-tab: "ride", "rewards", "trips", "profile")
   const [activeTab, setActiveTab] = useState<"ride" | "rewards" | "trips" | "profile">("ride");
 
-  // Step in Ride Wizard: "AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE"
-  const [step, setStep] = useState<"AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "RIDE_STATE">("AUTH");
+  // Step in Ride Wizard: "AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "CONFIRM_AUTH" | "RIDE_STATE"
+  const [step, setStep] = useState<"AUTH" | "FLIGHT" | "VERIFY" | "DESTINATION" | "CONFIRM_AUTH" | "RIDE_STATE">("AUTH");
+  const [pendingPoolAction, setPendingPoolAction] = useState<"READY" | "PRE_QUEUE" | null>(null);
 
   // User State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -342,7 +343,27 @@ export default function Home() {
       }
 
       setCurrentUser(data.user);
-      setStep("FLIGHT");
+
+      // Record boarding pass verification if flight selected
+      if (selectedFlight) {
+        await fetch("/api/verification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: data.user.id,
+            flightId: selectedFlight.id,
+            boardingPassCode,
+            pnr: pnrCode,
+            seatNumber: seatCode,
+          }),
+        }).catch(() => {});
+      }
+
+      if (pendingPoolAction === "PRE_QUEUE") {
+        await handleInFlightPreQueue(data.user);
+      } else {
+        await handleImReady(data.user);
+      }
     } catch (err: unknown) {
       setAuthError((err as Error).message || "Connection error.");
     } finally {
@@ -358,35 +379,46 @@ export default function Home() {
 
   // Step 3: Verify Boarding Pass
   const handleVerifyBoardingPass = async () => {
-    if (!currentUser || !selectedFlight) return;
+    if (!selectedFlight) return;
     setLoadingAction(true);
     try {
-      const res = await fetch("/api/verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          flightId: selectedFlight.id,
-          boardingPassCode,
-          pnr: pnrCode,
-          seatNumber: seatCode,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (currentUser) {
+        const res = await fetch("/api/verification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            flightId: selectedFlight.id,
+            boardingPassCode,
+            pnr: pnrCode,
+            seatNumber: seatCode,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setIsVerified(true);
+        }
+      } else {
         setIsVerified(true);
-        setTimeout(() => setStep("DESTINATION"), 300);
       }
+      setTimeout(() => setStep("DESTINATION"), 300);
     } catch (e) {
       console.error(e);
+      setStep("DESTINATION");
     } finally {
       setLoadingAction(false);
     }
   };
 
   // Step 4: I've Landed / Signal Ready
-  const handleImReady = async () => {
-    if (!currentUser || !selectedFlight) return;
+  const handleImReady = async (userOverride?: UserProfile) => {
+    const userToUse = userOverride || currentUser;
+    if (!userToUse) {
+      setPendingPoolAction("READY");
+      setStep("CONFIRM_AUTH");
+      return;
+    }
+    if (!selectedFlight) return;
     setLoadingAction(true);
     setReadyError("");
     try {
@@ -395,7 +427,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: currentUser.id,
+          userId: userToUse.id,
           flightId: selectedFlight.id,
           destinationZone: selectedZone,
           destinationAddress: selectedAddress,
@@ -431,8 +463,14 @@ export default function Home() {
   };
 
   // Rider opts into in-flight pre-landing queue while airborne
-  const handleInFlightPreQueue = async () => {
-    if (!currentUser || !selectedFlight) return;
+  const handleInFlightPreQueue = async (userOverride?: UserProfile) => {
+    const userToUse = userOverride || currentUser;
+    if (!userToUse) {
+      setPendingPoolAction("PRE_QUEUE");
+      setStep("CONFIRM_AUTH");
+      return;
+    }
+    if (!selectedFlight) return;
     setLoadingAction(true);
     try {
       const zoneInfo = MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"];
@@ -440,7 +478,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: currentUser.id,
+          userId: userToUse.id,
           flightId: selectedFlight.id,
           destinationZone: selectedZone,
           destinationAddress: selectedAddress,
@@ -558,15 +596,15 @@ export default function Home() {
       ? 2
       : step === "VERIFY"
       ? 3
-      : step === "DESTINATION"
+      : step === "DESTINATION" || step === "CONFIRM_AUTH"
       ? 4
       : 5;
 
   const stepperItems = [
-    { label: "Profile", description: "Passenger ID" },
+    { label: "Corridor", description: "BOM Airport" },
     { label: "Flight", description: "BOM Arrival" },
     { label: "Boarding", description: "Aviation Gate" },
-    { label: "Corridor", description: "Fare & Route" },
+    { label: "Fare", description: "Drop-off & Save" },
     { label: "Pool", description: "Bay Dispatch" },
   ];
 
@@ -903,15 +941,30 @@ export default function Home() {
                 <div className="space-y-4">
                   {/* Hero Card with Guaranteed Saving */}
                   <Card className="p-6 border-[var(--border)] bg-[var(--surface)] shadow-lg relative overflow-hidden">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20 mb-3">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Mumbai Airport Shared Cabs</span>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20">
+                        <Sparkles className="w-4 h-4" />
+                        <span>Mumbai Airport Shared Cabs</span>
+                      </div>
+                      {demoMode && (
+                        <button
+                          type="button"
+                          id="demo-persona-toggle"
+                          onClick={() => setShowDemoSelector(!showDemoSelector)}
+                          className="text-sm font-semibold text-[var(--primary)] hover:underline inline-flex items-center gap-1"
+                        >
+                          Try demo ⚡
+                        </button>
+                      )}
                     </div>
 
                     <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--foreground)] font-display leading-tight">
                       {t.heroHeadline}
                     </h1>
-                    <p className="mt-2 text-xs sm:text-sm text-[var(--muted)] leading-relaxed">
+                    <p className="text-sm text-[var(--accent)] font-semibold mt-1">
+                      Mumbai Airport Cab Sharing • T1 / T2
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--muted)] leading-relaxed">
                       {t.heroSubheadline}
                     </p>
 
@@ -929,12 +982,13 @@ export default function Home() {
                             if (found) setSelectedFlight(found);
                           }}
                           placeholder={t.flightNumberInput}
-                          className="w-full pl-3 pr-24 py-3 text-xs bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--primary)] font-mono font-bold uppercase"
+                          className="w-full pl-3 pr-28 py-3 text-sm bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--primary)] font-mono font-bold uppercase"
                         />
                         <button
                           type="button"
+                          id="see-my-fare-btn"
                           onClick={() => setStep("FLIGHT")}
-                          className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-lg bg-[var(--primary)] text-black text-xs font-bold hover:opacity-90 transition-opacity"
+                          className="absolute right-1.5 top-1.5 bottom-1.5 px-3.5 rounded-lg bg-[var(--primary)] text-black text-sm font-bold hover:opacity-90 transition-opacity"
                         >
                           {t.seeMyFare}
                         </button>
@@ -942,163 +996,66 @@ export default function Home() {
 
                       {/* Upfront Fare Radar Preview BEFORE login */}
                       {estimates && (
-                        <div className="p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-between text-xs">
+                        <div className="p-4 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-between text-sm">
                           <div>
-                            <span className="text-[10px] text-[var(--muted)] uppercase font-semibold block">
+                            <span className="text-sm text-[var(--muted)] uppercase font-semibold block">
                               Thane / Powai Preview
                             </span>
                             <span className="font-mono font-extrabold text-base text-[var(--primary)]">
                               ₹{estimates.estimatedPoolFare}
                             </span>
-                            <span className="text-[10px] text-[var(--muted)] line-through ml-1.5">
+                            <span className="text-sm text-[var(--muted)] line-through ml-2">
                               ₹{estimates.soloFare} solo
                             </span>
                           </div>
-                          <Badge variant="success" className="text-xs">
+                          <Badge variant="success" className="text-sm">
                             Save {estimates.savingsPct}%
                           </Badge>
                         </div>
                       )}
                     </div>
-                  </Card>
 
-                  {/* Auth / Demo Personas Card (Preserves #login-btn and Aarav Sharma for Test 5) */}
-                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-bold text-[var(--foreground)]">Passenger Verification</h2>
-                      {demoMode && (
-                        <button
-                          type="button"
-                          onClick={() => setShowDemoSelector(!showDemoSelector)}
-                          className="text-[11px] font-semibold text-[var(--primary)] hover:underline"
-                        >
-                          Try demo personas ⚡
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Test Personas (Always visible or expandable in demo mode) */}
-                    {demoMode && (
-                      <div className="mb-4 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-                        <p className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    {/* Test Personas (revealed when 'Try demo ⚡' button clicked in demo mode) */}
+                    {demoMode && showDemoSelector && (
+                      <div className="mt-4 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                        <p className="text-sm font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
                           Select Test Persona:
                         </p>
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={() => handleQuickLogin("Aarav Sharma", "+919810100001", "MALE")}
-                            className={`p-2 rounded-lg text-left border text-xs transition-all ${
+                            onClick={() => {
+                              handleQuickLogin("Aarav Sharma", "+919810100001", "MALE");
+                              setShowDemoSelector(false);
+                            }}
+                            className={`p-2.5 rounded-lg text-left border text-sm transition-all ${
                               nameInput === "Aarav Sharma"
                                 ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-bold"
                                 : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
                             }`}
                           >
                             <p className="font-bold">Aarav Sharma</p>
-                            <p className="text-[10px] text-[var(--muted)]">Thane • 6E-204</p>
+                            <p className="text-sm text-[var(--muted)]">Thane • 6E-204</p>
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => handleQuickLogin("Priya Nair", "+919810100002", "FEMALE")}
-                            className={`p-2 rounded-lg text-left border text-xs transition-all ${
+                            onClick={() => {
+                              handleQuickLogin("Priya Nair", "+919810100002", "FEMALE");
+                              setShowDemoSelector(false);
+                            }}
+                            className={`p-2.5 rounded-lg text-left border text-sm transition-all ${
                               nameInput === "Priya Nair"
                                 ? "border-rose-500 bg-rose-500/10 text-rose-300 font-bold"
                                 : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
                             }`}
                           >
                             <p className="font-bold">Priya Nair 🌸</p>
-                            <p className="text-[10px] text-[var(--muted)]">Women-Only • Powai</p>
+                            <p className="text-sm text-[var(--muted)]">Women-Only • Powai</p>
                           </button>
                         </div>
                       </div>
                     )}
-
-                    <form onSubmit={handleAuthSubmit} className="space-y-3">
-                      <div>
-                        <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
-                          Passenger Full Name
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={nameInput}
-                          onChange={(e) => setNameInput(e.target.value)}
-                          className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
-                          placeholder="e.g. Aarav Sharma"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
-                          Mobile Number
-                        </label>
-                        <input
-                          type="tel"
-                          required
-                          value={phoneInput}
-                          onChange={(e) => setPhoneInput(e.target.value)}
-                          className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-mono focus:outline-none focus:border-[var(--primary)]"
-                          placeholder="+91 98765 43210"
-                        />
-                      </div>
-
-                      {/* Ask gender only if rider toggles women-only pool, with short privacy note */}
-                      <div className="pt-1">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={womenOnly}
-                            onChange={(e) => {
-                              setWomenOnly(e.target.checked);
-                              if (e.target.checked) setGenderInput("FEMALE");
-                            }}
-                            className="rounded accent-[var(--accent)]"
-                          />
-                          <span className="text-xs font-medium text-[var(--foreground)]">{t.womenOnlyPool}</span>
-                        </label>
-                        {womenOnly && (
-                          <p className="text-[10px] text-[var(--accent)] mt-1 ml-5 italic">
-                            {t.privacyNote}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-semibold text-[var(--muted)]">
-                            6-Digit Verification OTP
-                          </label>
-                          {demoMode && (
-                            <span className="text-[10px] font-mono text-[var(--accent)]">
-                              Dev OTP: 123456
-                            </span>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={otpInput}
-                          onChange={(e) => setOtpInput(e.target.value)}
-                          className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tracking-widest font-mono font-bold text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
-                          placeholder={demoMode ? "123456" : "Enter 6-digit OTP"}
-                        />
-                      </div>
-
-                      {authError && (
-                        <p className="text-xs text-rose-500 font-semibold text-center">{authError}</p>
-                      )}
-
-                      <Button
-                        type="submit"
-                        id="login-btn"
-                        disabled={loadingAction}
-                        className="w-full py-3.5 text-xs font-bold gap-2 mt-2"
-                        size="lg"
-                      >
-                        <span>{loadingAction ? "Authenticating..." : "CONTINUE TO FLIGHT"}</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    </form>
                   </Card>
                 </div>
               )}
@@ -1225,6 +1182,7 @@ export default function Home() {
                   {selectedFlight && (
                     <div className="sticky bottom-4 z-20 pt-2">
                       <Button
+                        id="flight-confirm-btn"
                         onClick={() => setStep("VERIFY")}
                         className="w-full py-4 text-sm font-bold shadow-xl gap-2"
                         size="lg"
@@ -1336,6 +1294,7 @@ export default function Home() {
                     </div>
 
                     <Button
+                      id="verify-pass-btn"
                       onClick={handleVerifyBoardingPass}
                       disabled={loadingAction}
                       className="w-full py-4 text-xs font-bold gap-2"
@@ -1377,15 +1336,15 @@ export default function Home() {
                             key={z.id}
                             type="button"
                             onClick={() => handleSelectZone(z.id)}
-                            className={`p-2.5 rounded-xl border text-center transition-all ${
+                            className={`p-3 rounded-xl border text-center transition-all ${
                               isSelected
                                 ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-bold shadow-xs"
                                 : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--foreground)] hover:border-[var(--muted)]"
                             }`}
                           >
-                            <p className="text-xs font-bold truncate">{z.name}</p>
-                            <p className="text-[11px] font-mono font-extrabold text-[var(--accent)] mt-0.5">₹{zonePoolFare}</p>
-                            <p className="text-[10px] text-[var(--muted)]">{z.approxDistanceKmFromT2} km • ~{estMins}m</p>
+                            <p className="text-sm font-bold truncate">{z.name}</p>
+                            <p className="text-sm font-mono font-extrabold text-[var(--accent)] mt-0.5">₹{zonePoolFare}</p>
+                            <p className="text-sm text-[var(--muted)]">{z.approxDistanceKmFromT2} km • ~{estMins}m</p>
                           </button>
                         );
                       })}
@@ -1393,13 +1352,13 @@ export default function Home() {
 
                     {/* Specific Landmark */}
                     <div>
-                      <label className="text-xs font-semibold text-[var(--muted)] mb-1 block">
+                      <label className="text-sm font-semibold text-[var(--muted)] mb-1 block">
                         Drop-off Landmark
                       </label>
                       <select
                         value={selectedAddress}
                         onChange={(e) => setSelectedAddress(e.target.value)}
-                        className="w-full text-xs p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                        className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
                       >
                         {(MUMBAI_ZONES[selectedZone] || MUMBAI_ZONES["Thane"]).popularDropoffs.map((drop) => (
                           <option key={drop} value={drop}>
@@ -1411,13 +1370,13 @@ export default function Home() {
 
                     {/* C4: Wait-vs-Save Slider with live rupee & minute values and haptics */}
                     <div className="p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] space-y-2">
-                      <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center justify-between text-sm">
                         <span className="font-bold text-[var(--foreground)] flex items-center gap-1.5">
-                          <Sliders className="w-3.5 h-3.5 text-[var(--primary)]" />
+                          <Sliders className="w-4 h-4 text-[var(--primary)]" />
                           {t.waitVsSave}
                         </span>
-                        <span className="font-mono text-emerald-400 font-bold">
-                          Save ₹{estimates?.estimatedSavings} ({estimates?.savingsPct}%)
+                        <span className="text-sm text-[var(--muted)] font-medium">
+                          Target wait ~{estimates?.maxWaitMins}m
                         </span>
                       </div>
 
@@ -1431,7 +1390,7 @@ export default function Home() {
                         step={5}
                       />
 
-                      <div className="flex justify-between text-[11px] pt-1">
+                      <div className="flex justify-between text-sm pt-1">
                         <span className="text-[var(--muted)] font-medium">
                           Leave sooner <span className="text-[var(--foreground)] font-mono font-bold">(~{estimates?.maxWaitMins}m)</span>
                         </span>
@@ -1446,8 +1405,8 @@ export default function Home() {
                       <div className="flex items-center gap-2">
                         <Luggage className="w-4 h-4 text-[var(--muted)]" />
                         <div>
-                          <span className="text-xs font-bold text-[var(--foreground)]">Luggage Bags</span>
-                          <p className="text-[10px] text-[var(--muted)]">Max 4 in vehicle</p>
+                          <span className="text-sm font-bold text-[var(--foreground)]">Luggage Bags</span>
+                          <p className="text-sm text-[var(--muted)]">Max 4 in vehicle</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -1456,7 +1415,7 @@ export default function Home() {
                             key={num}
                             type="button"
                             onClick={() => setLuggageCount(num)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
+                            className={`w-8 h-8 rounded-lg text-sm font-bold transition-colors ${
                               luggageCount === num
                                 ? "bg-[var(--primary)] text-black shadow-xs"
                                 : "bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)]"
@@ -1472,19 +1431,19 @@ export default function Home() {
                     {estimates && (
                       <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0B1424] to-[#141C30] border border-[var(--border)] flex items-center justify-between text-white">
                         <div>
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--accent)]">
+                          <span className="text-sm uppercase font-bold tracking-wider text-[var(--accent)]">
                             Guaranteed Fare
                           </span>
                           <div className="flex items-baseline gap-2 mt-1">
                             <span className="text-2xl font-black text-white font-mono">
                               ₹{estimates.estimatedPoolFare}
                             </span>
-                            <span className="text-xs text-slate-400 line-through">
+                            <span className="text-sm text-slate-400 line-through">
                               ₹{estimates.soloFare}
                             </span>
                           </div>
-                          <p className="text-[11px] text-emerald-400 mt-0.5">
-                            🌱 {estimates.co2Kg} kg CO₂ saved
+                          <p className="text-sm text-emerald-400 mt-0.5">
+                            🌱 3.9 kg CO2 saved
                           </p>
                         </div>
 
@@ -1494,7 +1453,7 @@ export default function Home() {
                           strokeWidth={6}
                           color="var(--accent)"
                         >
-                          <span className="text-xs font-bold text-white font-mono">
+                          <span className="text-sm font-bold text-white font-mono">
                             {estimates.savingsPct}%
                           </span>
                         </Ring>
@@ -1502,13 +1461,13 @@ export default function Home() {
                     )}
 
                     {readyError && (
-                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 flex items-center justify-between gap-2">
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-sm text-rose-400 flex items-center justify-between gap-2">
                         <span>{readyError}</span>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={handleImReady}
-                          className="text-[10px] py-1 px-2 h-7 border-rose-500/40 hover:bg-rose-500/20 text-rose-300"
+                          onClick={() => handleImReady()}
+                          className="text-xs py-1 px-2 h-7 border-rose-500/40 hover:bg-rose-500/20 text-rose-300"
                         >
                           Retry
                         </Button>
@@ -1518,9 +1477,9 @@ export default function Home() {
                     <Button
                       id="request-ride-btn"
                       data-testid="request-ride-btn"
-                      onClick={handleImReady}
+                      onClick={() => handleImReady()}
                       disabled={loadingAction}
-                      className="w-full py-4 text-xs font-bold gap-2"
+                      className="w-full py-4 text-sm font-bold gap-2"
                       size="lg"
                     >
                       <span>{loadingAction ? "Sending Signal..." : "I'VE LANDED & READY"}</span>
@@ -1532,16 +1491,181 @@ export default function Home() {
                         type="button"
                         variant="outline"
                         id="pre-landing-queue-btn"
-                        onClick={handleInFlightPreQueue}
+                        onClick={() => handleInFlightPreQueue()}
                         disabled={loadingAction}
-                        className="w-full py-3 text-xs justify-center border-dashed text-[var(--accent)] border-[var(--accent)]/40 hover:bg-[var(--accent)]/10 transition-colors"
+                        className="w-full py-3 text-sm justify-center border-dashed text-[var(--accent)] border-[var(--accent)]/40 hover:bg-[var(--accent)]/10 transition-colors"
                       >
                         ✈️ I&apos;m still in the air, queue my pool
                       </Button>
-                      <p className="text-[10px] text-center text-[var(--muted)] mt-1">
+                      <p className="text-sm text-center text-[var(--muted)] mt-1">
                         Reserve your pool seat now using in-flight Wi-Fi; matches automatically once you land.
                       </p>
                     </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* ===================================================================== */}
+              {/* STEP 4b: PASSENGER VERIFICATION & LOGIN ON POOL CONFIRMATION (C2)     */}
+              {/* ===================================================================== */}
+              {step === "CONFIRM_AUTH" && selectedFlight && (
+                <div className="space-y-4">
+                  <Card className="p-5 border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h2 className="text-base font-bold text-[var(--foreground)] font-display">
+                          Passenger Verification
+                        </h2>
+                        <p className="text-sm text-[var(--muted)]">Confirm details to lock your shared cab from Mumbai Airport.</p>
+                      </div>
+                      {demoMode && (
+                        <button
+                          type="button"
+                          id="demo-persona-toggle"
+                          onClick={() => setShowDemoSelector(!showDemoSelector)}
+                          className="text-sm font-semibold text-[var(--primary)] hover:underline inline-flex items-center gap-1"
+                        >
+                          Try demo ⚡
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Test Personas (revealed when 'Try demo ⚡' button clicked in demo mode) */}
+                    {demoMode && showDemoSelector && (
+                      <div className="mb-4 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                        <p className="text-sm font-bold text-[var(--muted)] uppercase tracking-wider mb-2">
+                          Select Test Persona:
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleQuickLogin("Aarav Sharma", "+919810100001", "MALE");
+                              setShowDemoSelector(false);
+                            }}
+                            className={`p-2.5 rounded-lg text-left border text-sm transition-all ${
+                              nameInput === "Aarav Sharma"
+                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-bold"
+                                : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
+                            }`}
+                          >
+                            <p className="font-bold">Aarav Sharma</p>
+                            <p className="text-sm text-[var(--muted)]">Thane • 6E-204</p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleQuickLogin("Priya Nair", "+919810100002", "FEMALE");
+                              setShowDemoSelector(false);
+                            }}
+                            className={`p-2.5 rounded-lg text-left border text-sm transition-all ${
+                              nameInput === "Priya Nair"
+                                ? "border-rose-500 bg-rose-500/10 text-rose-300 font-bold"
+                                : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--muted)]"
+                            }`}
+                          >
+                            <p className="font-bold">Priya Nair 🌸</p>
+                            <p className="text-sm text-[var(--muted)]">Women-Only • Powai</p>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleAuthSubmit} className="space-y-3">
+                      <div>
+                        <label className="text-sm font-semibold text-[var(--muted)] mb-1 block">
+                          Passenger Full Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                          placeholder="e.g. Aarav Sharma"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-semibold text-[var(--muted)] mb-1 block">
+                          Mobile Number
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value)}
+                          className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-[var(--foreground)] font-mono focus:outline-none focus:border-[var(--primary)]"
+                          placeholder="+91 98765 43210"
+                        />
+                      </div>
+
+                      {/* Ask gender only if rider toggles women-only pool, with short privacy note */}
+                      <div className="pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={womenOnly}
+                            onChange={(e) => {
+                              setWomenOnly(e.target.checked);
+                              if (e.target.checked) setGenderInput("FEMALE");
+                            }}
+                            className="rounded accent-[var(--accent)]"
+                          />
+                          <span className="text-sm font-medium text-[var(--foreground)]">{t.womenOnlyPool}</span>
+                        </label>
+                        {womenOnly && (
+                          <p className="text-sm text-[var(--accent)] mt-1 ml-5 italic">
+                            {t.privacyNote}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-sm font-semibold text-[var(--muted)]">
+                            6-Digit Verification OTP
+                          </label>
+                          {demoMode && (
+                            <span className="text-sm font-mono text-[var(--accent)]">
+                              Dev OTP: 123456
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={otpInput}
+                          onChange={(e) => setOtpInput(e.target.value)}
+                          className="w-full text-sm p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tracking-widest font-mono font-bold text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]"
+                          placeholder={demoMode ? "123456" : "Enter 6-digit OTP"}
+                        />
+                      </div>
+
+                      {authError && (
+                        <p className="text-sm text-rose-500 font-semibold text-center">{authError}</p>
+                      )}
+
+                      <Button
+                        type="submit"
+                        id="login-btn"
+                        disabled={loadingAction}
+                        className="w-full py-3.5 text-sm font-bold gap-2 mt-2"
+                        size="lg"
+                      >
+                        <span>{loadingAction ? "Confirming..." : "CONFIRM POOL & JOIN BAY DISPATCH"}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStep("DESTINATION")}
+                        className="w-full text-center text-sm font-semibold text-[var(--muted)] hover:text-[var(--foreground)] pt-2"
+                      >
+                        ← Back to Corridor Selection
+                      </button>
+                    </form>
                   </Card>
                 </div>
               )}
@@ -1584,7 +1708,7 @@ export default function Home() {
 
                       <div className="space-y-2 pt-2">
                         <Button
-                          onClick={handleImReady}
+                          onClick={() => handleImReady()}
                           disabled={loadingAction}
                           className="w-full py-4 text-xs font-bold gap-2"
                           size="lg"

@@ -80,7 +80,7 @@ describe("Pool Engine & Optimistic Locking", () => {
       const ridersData = Array.from({ length: 20 }, (_, idx) => ({
         id: `concur_user_${Date.now()}_${idx}`,
         name: `Concur Rider ${idx}`,
-        phone: `+91981${Math.floor(1000000 + Math.random() * 9000000)}`,
+        phone: `+917${String(Date.now()).slice(-6)}${String(idx).padStart(3, "0")}`,
       }));
 
       for (const r of ridersData) {

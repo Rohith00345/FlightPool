@@ -32,7 +32,7 @@ const notoSansDevanagari = Noto_Sans_Devanagari({
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "FlightPool • Night Runway Mumbai Airport Cab Sharing (BOM)",
+  title: "FlightPool • Mumbai Airport Cab Sharing (BOM)",
   description:
     "Share an airport cab from Mumbai Airport (BOM T1 & T2) to Thane, Mulund, Powai, Bandra, Andheri, and Navi Mumbai. Save up to 50% with verified co-passengers.",
   applicationName: "FlightPool",

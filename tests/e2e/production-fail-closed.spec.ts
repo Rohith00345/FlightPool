@@ -40,21 +40,29 @@ test.describe("Production Mode Fail-Closed Security Suite (Port 3001)", () => {
     // Verify page loaded
     await expect(page.locator("header")).toBeVisible();
 
-    // Verify persona cards are NOT rendered
+    // Verify persona cards and dev badge are NOT rendered on landing page
     await expect(page.locator("text=Select Test Persona")).toHaveCount(0);
     await expect(page.locator("text=Aarav Sharma")).toHaveCount(0);
     await expect(page.locator("text=Priya Nair")).toHaveCount(0);
-
-    // Verify Dev OTP badge is NOT rendered
     await expect(page.locator("text=Dev OTP: 123456")).toHaveCount(0);
+    await expect(page.locator("#demo-persona-toggle")).toHaveCount(0);
 
-    // Verify OTP input placeholder and value
+    // Navigate through See my fare and pool confirmation to reach login form
+    await page.locator("#see-my-fare-btn").click();
+    await page.locator("#flight-confirm-btn").click();
+    await page.locator("#verify-pass-btn").click();
+    await page.locator("#request-ride-btn").click();
+
+    // Verify OTP input placeholder and value on pool confirmation login form
     const otpInput = page.locator('input[placeholder="Enter 6-digit OTP"]');
     await expect(otpInput).toBeVisible();
     await expect(otpInput).toHaveValue("");
 
-    // Verify 123456 is NOT the placeholder
+    // Verify 123456 is NOT the placeholder and no demo persona controls appear
     await expect(page.locator('input[placeholder="123456"]')).toHaveCount(0);
+    await expect(page.locator("text=Select Test Persona")).toHaveCount(0);
+    await expect(page.locator("text=Dev OTP: 123456")).toHaveCount(0);
+    await expect(page.locator("#demo-persona-toggle")).toHaveCount(0);
   });
 
   // 3. Admin Page: No persona quick sign-in button
