@@ -89,7 +89,7 @@ export default function MapPicker({
       const zoneIcon = L.divIcon({
         className: "custom-zone-pin",
         html: `
-          <div style="background:${pinColor}; color:#070A12; width:${pinSize}px; height:${pinSize}px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; box-shadow:0 0 ${isSelected ? "14px #2DE2C4" : "4px rgba(0,0,0,0.5)"}; border:2px solid ${isSelected ? "#FFFFFF" : "#141C30"}; cursor:pointer; transition:transform 0.2s;">
+          <div style="background:${pinColor}; color:#070A12; width:${pinSize}px; height:${pinSize}px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; box-shadow:0 0 ${isSelected ? "14px #2DE2C4" : "4px rgba(0,0,0,0.5)"}; border:2px solid ${isSelected ? "#FFFFFF" : "#141C30"}; cursor:pointer; transition:transform 0.2s;">
             ${isSelected ? "✓" : "●"}
           </div>
         `,
@@ -126,7 +126,7 @@ export default function MapPicker({
         const stopIcon = L.divIcon({
           className: "custom-stop-pin",
           html: `
-            <div style="background:#FFB020; color:#070A12; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; box-shadow:0 0 10px rgba(255,176,32,0.6); border:2px solid #070A12;">
+            <div style="background:#FFB020; color:#070A12; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; box-shadow:0 0 10px rgba(255,176,32,0.6); border:2px solid #070A12;">
               #${stop.order}
             </div>
           `,

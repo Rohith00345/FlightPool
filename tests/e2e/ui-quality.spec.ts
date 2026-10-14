@@ -160,4 +160,113 @@ test.describe("UI Quality, Accessibility (WCAG AA) & Screenshots", () => {
     await expect(page.locator("text=840")).not.toBeVisible();
     await expect(page.locator("text=First Landing")).not.toBeVisible();
   });
+
+  // 9. Verify 14px minimum-text rule, overflow, and screenshots across 360px/390px in Dark & Light
+  test("9. 14px minimum-text rule and mobile layout checks on 7 screens at 360px and 390px (Dark & Light)", async ({ page }) => {
+    test.setTimeout(120000);
+    const viewports = [
+      { w: 360, h: 740 },
+      { w: 390, h: 844 },
+    ];
+    const themes = ["dark", "light"] as const;
+
+    for (const { w, h } of viewports) {
+      for (const theme of themes) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.goto("/");
+        await page.waitForLoadState("domcontentloaded");
+
+        // Apply theme
+        await page.evaluate((th) => {
+          if (th === "dark") {
+            document.documentElement.classList.remove("light");
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.classList.add("light");
+          }
+        }, theme);
+
+        const checkOverflow = async (screenName: string) => {
+          const bad = await page.evaluate(() => {
+            const list: Array<{ tag: string; className: string; scrollWidth: number; right: number; text: string }> = [];
+            document.querySelectorAll("*").forEach((el) => {
+              const rect = el.getBoundingClientRect();
+              if (el.scrollWidth > window.innerWidth + 1 || rect.right > window.innerWidth + 1) {
+                list.push({
+                  tag: el.tagName,
+                  className: typeof el.className === "string" ? el.className : "",
+                  scrollWidth: el.scrollWidth,
+                  right: rect.right,
+                  text: (el.textContent || "").trim().slice(0, 30),
+                });
+              }
+            });
+            return list;
+          });
+          if (bad.length > 0) {
+            console.log(`[Overflow on ${screenName} at ${w}px ${theme}]:`, JSON.stringify(bad.slice(0, 5)));
+          }
+          expect(bad.length).toBe(0);
+        };
+
+        // --- SCREEN 1: Hero ---
+        await expect(page.locator("header")).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/hero-${w}-${theme}.png`, fullPage: false });
+        await checkOverflow("Hero");
+
+        // --- SCREEN 2: Flight Picker ---
+        await page.locator("#see-my-fare-btn").click();
+        await expect(page.locator("text=Select Your Flight")).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/flight-${w}-${theme}.png`, fullPage: false });
+        await checkOverflow("Flight Picker");
+
+        // --- SCREEN 3: Corridor Step & SCREEN 4: Fare Card ---
+        await page.locator("#flight-confirm-btn").click();
+        await expect(page.locator("text=Verify Boarding Pass")).toBeVisible();
+        await page.locator("#verify-pass-btn").click();
+        await expect(page.locator("text=Select Drop-off Corridor")).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/corridor-${w}-${theme}.png`, fullPage: false });
+
+        // Fare Card
+        const fareCard = page.locator("text=Guaranteed Fare").locator("xpath=ancestor::div[contains(@class, 'rounded-2xl')]").first();
+        if (await fareCard.isVisible()) {
+          await fareCard.screenshot({ path: `docs/screenshots/fare-${w}-${theme}.png` });
+        }
+        await checkOverflow("Corridor & Fare");
+
+        // --- SCREEN 5: Login Step (Passenger Verification) ---
+        await page.locator("#request-ride-btn").click();
+        await expect(page.locator("#login-btn")).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/login-${w}-${theme}.png`, fullPage: false });
+        await checkOverflow("Login Confirmation");
+
+        // --- SCREEN 6: Pool Screen ---
+        await page.locator("#demo-persona-toggle").first().click();
+        await page.locator("text=Aarav Sharma").first().click();
+        await page.locator("#login-btn").click();
+        await expect(page.locator("text=Scanning Pool Formation...").or(page.locator("text=Active Pool"))).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/pool-${w}-${theme}.png`, fullPage: false });
+        await checkOverflow("Active Pool");
+
+        // --- SCREEN 7: Rewards Tab ---
+        await page.locator('button:has-text("Rewards"):visible').first().click();
+        await expect(page.locator('[data-testid="demo-data-label"]')).toBeVisible();
+        await page.screenshot({ path: `docs/screenshots/rewards-${w}-${theme}.png`, fullPage: false });
+        await checkOverflow("Rewards Tab");
+
+        // Font size check on Rewards screen: ensure small text classes respect 14px rule
+        const textUnder14Count = await page.evaluate(() => {
+          const els = document.querySelectorAll<HTMLElement>('.text-xs, .text-\\[10px\\], .text-\\[11px\\], .text-\\[12px\\], .text-\\[13px\\], .custom-zone-tooltip');
+          let count = 0;
+          els.forEach((el) => {
+            const fs = parseFloat(window.getComputedStyle(el).fontSize);
+            if (fs < 13.5) count++;
+          });
+          return count;
+        });
+        expect(textUnder14Count).toBe(0);
+      }
+    }
+  });
 });

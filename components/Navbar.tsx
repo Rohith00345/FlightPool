@@ -42,9 +42,9 @@ export default function Navbar({
 
   return (
     <header className="sticky top-0 z-40 bg-[var(--surface)]/95 backdrop-blur-md text-[var(--text)] border-b border-[var(--surface-border)] shadow-sm transition-colors">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
         {/* Brand */}
-        <Link href="/" className="flex items-center gap-2.5 group">
+        <Link href="/" className="flex items-center gap-2 group">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[var(--primary)] to-[var(--accent)] flex items-center justify-center text-[var(--primary-text)] shadow-sm group-hover:scale-105 transition-transform">
             <Plane className="w-4 h-4 transform -rotate-45" />
           </div>
@@ -55,7 +55,7 @@ export default function Navbar({
                 BOM
               </span>
             </div>
-            <p className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5">
+            <p className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5 hidden sm:block">
               Mumbai Airport Cab Sharing • T1 / T2
             </p>
           </div>
